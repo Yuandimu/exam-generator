@@ -332,20 +332,12 @@
         </div>
         <div class="config-grid">
           <div class="form-group">
-            <label class="form-label">模块名称</label>
-            <input type="text" class="form-input" id="moduleName" placeholder="如：第一模块 - 基础概念" value="第一模块">
-          </div>
-          <div class="form-group">
             <label class="form-label">出题数量</label>
             <select class="form-select" id="questionCount">
               <option value="10" selected>10题（标准模块）</option>
               <option value="20">20题（双倍题库）</option>
               <option value="30">30题（完整题库）</option>
             </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">内容预览</label>
-            <div style="padding:10px;background:var(--gray-50);border-radius:8px;font-size:13px;color:var(--gray-600);border:1px solid var(--gray-200);min-height:40px;max-height:80px;overflow:hidden;text-overflow:ellipsis" id="contentPreview">（未输入课程内容）</div>
           </div>
           <div class="form-group full">
             <label class="form-label">📦 内容分区</label>
@@ -354,7 +346,7 @@
           </div>
           <div class="form-group full">
             <label class="form-label">🎯 出题聚焦方向 <span style="font-weight:400;color:var(--gray-500);font-size:12px">（题目围绕什么核心主题出题）</span></label>
-            <input type="text" class="form-input" id="focusDirection" placeholder="如：儿童表现特征与教学策略、课堂观察要点、发展阶段特征" value="儿童表现特征与教学策略">
+            <input type="text" class="form-input" id="focusDirection" placeholder="如：儿童表现特征与教学策略、课堂观察要点、发展阶段特征" value="">
             <div style="font-size:11px;color:var(--gray-500);margin-top:2px">💡 例如：儿童表现特征、教学策略、发展规律、常见误区、家长沟通要点</div>
           </div>
           <div class="form-group">
@@ -536,16 +528,17 @@
           <span class="card-title">🔑 API 配置</span>
         </div>
         <div class="alert alert-warning">
-          ⚠️ 请填写您的 OpenAI 兼容 API 配置（支持 OpenAI、通义千问、文心一言、DeepSeek 等兼容接口）
+          ⚠️ 请填写您的 OpenAI 兼容 API 配置（支持通义千问、文心一言、DeepSeek 等兼容接口）<br>
+          <strong>注意：如果不使用 API，题目质量很不妙。</strong>
         </div>
         <div class="config-grid">
           <div class="form-group">
             <label class="form-label">API Base URL</label>
-            <input type="text" class="form-input" id="apiBaseUrl" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+            <input type="text" class="form-input" id="apiBaseUrl" placeholder="https://api.deepseek.com/v1" value="https://api.deepseek.com/v1">
           </div>
           <div class="form-group">
             <label class="form-label">模型名称</label>
-            <input type="text" class="form-input" id="apiModel" placeholder="gpt-4o / qwen-turbo / deepseek-chat" value="gpt-4o">
+            <input type="text" class="form-input" id="apiModel" placeholder="deepseek-chat / qwen-turbo / gpt-4o" value="deepseek-chat">
           </div>
           <div class="form-group full">
             <label class="form-label">API Key</label>
@@ -561,11 +554,6 @@
       <div class="card">
         <div class="card-header"><span class="card-title">🎯 快捷配置</span></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
-          <div class="card" style="padding:16px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:none" onclick="setPreset('openai')">
-            <div style="font-size:24px;margin-bottom:8px">🟢</div>
-            <div style="font-weight:600;font-size:14px">OpenAI</div>
-            <div style="font-size:12px;color:var(--gray-500)">GPT-4o / GPT-3.5</div>
-          </div>
           <div class="card" style="padding:16px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:none" onclick="setPreset('deepseek')">
             <div style="font-size:24px;margin-bottom:8px">🔵</div>
             <div style="font-weight:600;font-size:14px">DeepSeek</div>
@@ -745,11 +733,11 @@ let state = {
   currentFilter: 'all',
   editingQuestion: null,
   settings: {
-    apiBaseUrl: localStorage.getItem('apiBaseUrl') || 'https://api.openai.com/v1',
+    apiBaseUrl: localStorage.getItem('apiBaseUrl') || 'https://api.deepseek.com/v1',
     apiKey: localStorage.getItem('apiKey') || '',
-    apiModel: localStorage.getItem('apiModel') || 'gpt-4o',
+    apiModel: localStorage.getItem('apiModel') || 'deepseek-chat',
     isDemoMode: localStorage.getItem('isDemoMode') === 'true',
-    focusDirection: localStorage.getItem('focusDirection') || '儿童表现特征与教学策略',
+    focusDirection: localStorage.getItem('focusDirection') || '',
     // 出题规范（难度比例，整数百分比，三项和=100）
     diffL1: parseInt(localStorage.getItem('diffL1') || '60'),
     diffL2: parseInt(localStorage.getItem('diffL2') || '30'),
@@ -796,11 +784,11 @@ function navigate(page) {
 function updateGeneratePage() {
   const content = document.getElementById('courseContent').value;
   state.courseContent = content;
-  const preview = document.getElementById('contentPreview');
+  // 标准化题库中已有题目的type（兼容旧数据）
+  state.questionBank.forEach(q => { q.type = normalizeQuestionType(q.type); });
   if (content.trim()) {
-    preview.textContent = content.trim().substring(0, 100) + (content.length > 100 ? '...' : '');
     // 预检分区
-    const knowledge = extractKnowledge(content, document.getElementById('moduleName').value || '课程');
+    const knowledge = extractKnowledge(content, '课程内容');
     const modCount = knowledge.modules.length;
     const modNames = knowledge.modules.map(m => m.name).join('、');
     const modSizes = knowledge.modules.map(m => m.content.length + '字').join(' / ');
@@ -819,11 +807,9 @@ function updateGeneratePage() {
       content,
       knowledge,
       detectedNames: knowledge.modules.map(m => m.name),
-      contentPreview: content.trim().substring(0, 1500),
       partSizes: knowledge.modules.map(m => m.content.length)
     };
   } else {
-    preview.textContent = '（未输入课程内容）';
     const modEl = document.getElementById('moduleInfo');
     if (modEl) modEl.innerHTML = '';
     window._lastDiagInfo = null;
@@ -867,10 +853,6 @@ function showDiagModal() {
     html += '<tr><td style="padding:6px 8px">' + m.name + '</td><td style="padding:6px 8px;text-align:right">' + m.content.length + '</td><td style="padding:6px 8px;font-size:11px;color:var(--gray-500)">' + escapeHtml(preview) + '</td></tr>';
   }
   html += '</table>';
-
-  html += '<hr style="border-color:var(--gray-200);margin:16px 0">';
-  html += '<p style="font-weight:600;margin-bottom:8px">📝 原文前 1500 字符：</p>';
-  html += '<pre style="background:var(--gray-50);padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;line-height:1.6">' + escapeHtml(info.contentPreview) + '</pre>';
 
   html += '<p style="font-size:12px;color:var(--gray-500);margin-top:12px">💡 出题时，题目总数将按4部分均分。每部分的题目覆盖该段内容的核心知识点。</p>';
 
@@ -1065,9 +1047,14 @@ async function startGenerate() {
   }
 
   state.courseContent = content;
-  const moduleName = document.getElementById('moduleName').value || '第一模块';
+  const moduleName = '课程内容';
   const count = parseInt(document.getElementById('questionCount').value);
-  const focusDir = document.getElementById('focusDirection').value || '儿童表现特征与教学策略';
+  const focusDir = document.getElementById('focusDirection').value.trim();
+  if (!focusDir) {
+    showToast('⚠️ 请填写出题聚焦方向', 'warning');
+    document.getElementById('focusDirection').focus();
+    return;
+  }
   state.settings.focusDirection = focusDir;
   localStorage.setItem('focusDirection', focusDir);
 
@@ -1104,7 +1091,6 @@ async function startGenerate() {
 }
 
 async function callAI(content, moduleName, count, focusDirection) {
-  // 读取用户自定义的题型比例和难度比例
   const s = state.settings;
   const single   = Math.max(0, Math.round(count * s.typeSingle   / 100));
   const multi    = Math.max(0, Math.round(count * s.typeMulti    / 100));
@@ -1115,21 +1101,26 @@ async function callAI(content, moduleName, count, focusDirection) {
   const l2n = Math.round(count * s.diffL2 / 100);
   const l3n = count - l1n - l2n;
 
+  // ★ 修复：长内容分段发送，确保覆盖全文
+  if (content.length > 8000) {
+    return await callAIBySections(content, moduleName, count, focusDirection);
+  }
+
   const prompt = `你是一位专业的教学测评专家，请根据以下课程内容，严格按照规范生成考试题目。
 
-课程内容已按顺序分为4个部分，请确保题目覆盖全部4个部分的内容，前后兼顾，不要集中在某一处。
+★ 重要：题目必须严格基于课程内容出题，题干和选项都必须来自课程内容中的具体知识点，不得编造课程中未提及的内容。
 
 课程内容：
-${content.substring(0, 3000)}
+${content}
 
 出题聚焦方向：${focusDirection}
-重要：所有题目的核心立意必须围绕「${focusDirection}」，侧重于儿童在该领域的实际表现、教学应对策略和发展规律，避免出"以下哪项属于XX模块"这样的内容归类题。
+重要：所有题目的核心立意必须围绕「${focusDirection}」，侧重于课程内容中的实际知识点，避免出"以下哪项属于XX模块"这样的内容归类题。
 
 出题规范：
-1. 总题数：${count}题（模块名：${moduleName}）- 请尽量均分到内容的4个部分
+1. 总题数：${count}题（模块名：${moduleName}）
 2. 难度分配：L1基础层 ${l1n}题(≥90%答对率), L2进阶层 ${l2n}题(60-80%答对率), L3挑战层 ${l3n}题(30-50%答对率)
 3. 题型分配：单选题 ${single}题, 多选题 ${multi}题, 判断题 ${judge}题, 情境多选题 ${scenario}题, 问答题 ${qa}题
-4. 情境多选题要求：给出一个复杂但典型的教学或儿童发展情境，要求选出所有合适的做法/策略（多选）。情境和选项应对课程内容进行合理拓展和延伸，不能只是原文摘抄。
+4. 情境多选题要求：基于课程内容给出一个复杂但典型的情境，要求选出所有合适的做法/策略（多选）。情境和选项应对课程内容进行合理拓展和延伸，不能只是原文摘抄。
 5. 问答题要求：围绕课程内容出开放性简答题，要求用2-4句话阐述观点或解释原理。需提供参考答案要点（2-4个关键点）。
 
 请以严格的JSON格式返回，格式如下（只返回JSON，不要其他文字）：
@@ -1138,13 +1129,13 @@ ${content.substring(0, 3000)}
     {
       "type": "single|multi|judge|scenario|qa",
       "level": "L1|L2|L3",
-      "content": "题目内容（情境多选题请给出详细的情境描述；问答题请给出清晰的开放性问题）",
+      "content": "题目内容（必须基于课程内容中的具体知识点出题）",
       "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
       "answer": "A（单选填字母，多选填如AC，判断填正确/错误，问答题填参考答案要点）",
       "keywords": "关键词1;关键词2（仅情境多选题需要）",
-      "point": "考核知识点",
+      "point": "概括性考核知识点（6-12字，不要引用原文长句）",
       "analysis": "试题解析",
-      "difficulty": "易|中|难"
+      "difficulty": "简单|中等|难"
     }
   ]
 }`;
@@ -1159,7 +1150,7 @@ ${content.substring(0, 3000)}
       model: state.settings.apiModel,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 4000
+      max_tokens: 8000
     })
   });
 
@@ -1171,12 +1162,99 @@ ${content.substring(0, 3000)}
   const data = await response.json();
   const text = data.choices[0].message.content;
   
-  // Extract JSON
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('AI返回格式错误');
   
   const parsed = JSON.parse(jsonMatch[0]);
-  return parsed.questions.map((q, i) => ({ ...q, id: Date.now() + i, module: moduleName, inBank: false, selected: true }));
+  return parsed.questions.map((q, i) => ({
+    ...q,
+    type: normalizeQuestionType(q.type),
+    difficulty: normalizeDifficulty(q.difficulty),
+    point: normalizePoint(q.point, q.type),
+    id: Date.now() + i,
+    module: moduleName,
+    inBank: false,
+    selected: true
+  }));
+}
+
+// ★ 长内容分段调用AI：将内容按区切分，每段单独生成题目，确保全文覆盖
+async function callAIBySections(content, moduleName, count, focusDirection) {
+  const s = state.settings;
+  const knowledge = extractKnowledge(content, moduleName);
+  const modules = knowledge.modules;
+  const modCount = Math.max(1, modules.length);
+  const allQuestions = [];
+  let qIdBase = Date.now();
+  
+  const perSection = Math.ceil(count / modCount);
+  
+  for (let i = 0; i < modules.length; i++) {
+    const mod = modules[i];
+    const sectionCount = (i === modules.length - 1) ? (count - allQuestions.length) : Math.min(perSection, count - allQuestions.length);
+    if (sectionCount <= 0) continue;
+    
+    const sSingle   = Math.max(0, Math.round(sectionCount * s.typeSingle   / 100));
+    const sMulti    = Math.max(0, Math.round(sectionCount * s.typeMulti    / 100));
+    const sJudge    = Math.max(0, Math.round(sectionCount * s.typeJudge    / 100));
+    const sScenario = Math.max(0, Math.round(sectionCount * s.typeScenario / 100));
+    const sQA       = Math.max(0, sectionCount - sSingle - sMulti - sJudge - sScenario);
+    const sL1 = Math.round(sectionCount * s.diffL1 / 100);
+    const sL2 = Math.round(sectionCount * s.diffL2 / 100);
+    const sL3 = sectionCount - sL1 - sL2;
+    
+    const prompt = `你是一位专业的教学测评专家，请根据以下课程内容，严格按照规范生成考试题目。
+
+★ 重要：题目必须严格基于课程内容出题，题干和选项都必须来自课程内容中的具体知识点，不得编造课程中未提及的内容。
+
+课程内容（${mod.name}）：
+${mod.content}
+
+出题聚焦方向：${focusDirection}
+出题规范：
+1. 总题数：${sectionCount}题（${mod.name} - ${moduleName}）
+2. 难度分配：L1基础层 ${sL1}题, L2进阶层 ${sL2}题, L3挑战层 ${sL3}题
+3. 题型分配：单选题 ${sSingle}题, 多选题 ${sMulti}题, 判断题 ${sJudge}题, 情境多选题 ${sScenario}题, 问答题 ${sQA}题
+4. 情境多选题要求：基于课程内容给出一个复杂但典型的情境，要求选出所有合适的做法/策略（多选）。
+5. 问答题要求：围绕课程内容出开放性简答题，需提供参考答案要点。
+
+请以严格的JSON格式返回：{"questions":[{"type":"...","level":"...","content":"...","options":[...],"answer":"...","keywords":"...","point":"...","analysis":"...","difficulty":"..."}]}
+
+注意：
+- difficulty字段只能填写"简单"、"中等"、"难"三者之一，禁止填写数字或其他文字。
+- point字段请用6-12字的概括性短语描述考核知识点，禁止直接引用课程原文长句。`;
+
+    try {
+      const response = await fetch(s.apiBaseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.apiKey },
+        body: JSON.stringify({ model: s.apiModel, messages: [{ role: 'user', content: prompt }], temperature: 0.7, max_tokens: 6000 })
+      });
+      
+      if (!response.ok) continue;
+      const data = await response.json();
+      const text = data.choices[0].message.content;
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) continue;
+      const parsed = JSON.parse(jsonMatch[0]);
+      parsed.questions.forEach((q, idx) => {
+        allQuestions.push({
+          ...q,
+          type: normalizeQuestionType(q.type),
+          difficulty: normalizeDifficulty(q.difficulty),
+          point: normalizePoint(q.point, q.type),
+          id: qIdBase++,
+          module: mod.name + '（' + moduleName + '）',
+          inBank: false,
+          selected: true
+        });
+      });
+    } catch(e) {
+      console.error('Section ' + i + ' AI call failed:', e);
+    }
+  }
+  
+  return allQuestions;
 }
 
 function generateDemoQuestions(content, moduleName, count, focusDirection) {
@@ -1349,7 +1427,7 @@ function buildModuleObj(name, modContent) {
 function buildContentBasedQuestions(knowledge, moduleName, typeCounts, levels, focusDirection) {
   const { modules, globalFacts, ageGroups } = knowledge;
   let qId = Date.now();
-  const diffAt = lvl => lvl === 'L1' ? '易' : lvl === 'L2' ? '中' : '难';
+  const diffAt = lvl => lvl === 'L1' ? '简单' : lvl === 'L2' ? '中等' : '难';
 
   const totalNeeded = (typeCounts.single || 0) + (typeCounts.multi || 0) + (typeCounts.judge || 0) + (typeCounts.scenario || 0) + (typeCounts.qa || 0);
 
@@ -1405,372 +1483,346 @@ function buildContentBasedQuestions(knowledge, moduleName, typeCounts, levels, f
   return allQuestions.slice(0, totalNeeded);
 }
 
-// ───────── 为指定模块生成单道指定类型的题目（v7：聚焦方向驱动） ─────────
+// ───────── 辅助函数 ─────────
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function getFactSubject(fact) {
+  const m = fact.match(/^([^，。：；]{2,15})(?:是|是指|即为|包括|包含|涵盖|分为|指|有|为)/);
+  if (m) return m[1].trim();
+  const cut = fact.search(/[，。：；]/);
+  return cut > 1 ? fact.substring(0, cut).trim() : fact.substring(0, 15).trim();
+}
+
+function negateStatement(fact) {
+  const ops = [
+    [/需要|应当|应该|必须/g, '不需要'],
+    [/能够|可以|会|能/g, '不能'],
+    [/主要|核心|关键|重要/g, '次要'],
+    [/所有|全部|每个/g, '部分'],
+    [/包括|包含|涵盖/g, '不包括'],
+    [/正确|合理|有效|适当/g, '不合理'],
+    [/已经|已/g, '尚未'],
+    [/首先|最先/g, '最后'],
+  ];
+  for (const [pattern, replacement] of ops) {
+    if (pattern.test(fact)) {
+      return fact.replace(pattern, replacement);
+    }
+  }
+  if (fact.length > 2 && !fact.startsWith('不')) return '不' + fact;
+  return fact + '的说法有误';
+}
+
+// ───────── 为指定模块生成单道指定类型的题目（v8：基于课程内容出题） ─────────
+
+
+/**
+ * 统一难度显示：将AI返回的各种难度格式标准化为 简单/中等/难
+ */
+function normalizeDifficulty(diff) {
+  if (!diff) return '中等';
+  const d = String(diff).trim().toLowerCase();
+  // 数字映射：0-0.4简单, 0.5-0.7中等, 0.8-1.0难
+  if (/^0\.[0-4]$/.test(d) || /^[0-4]$/.test(d) || d === '低' || d === '简单' || d === '易' || d === '容易') return '简单';
+  if (/^0\.[5-7]$/.test(d) || /^[5-7]$/.test(d) || d === '中' || d === '中等' || d === '一般') return '中等';
+  if (/^0\.[8-9]$/.test(d) || /^[8-9]$/.test(d) || /^1\.0$/.test(d) || d === '高' || d === '难' || d === '困难' || d === '复杂') return '难';
+  // 字符串包含判断
+  if (d.includes('简单') || d.includes('易') || d.includes('低')) return '简单';
+  if (d.includes('中等') || d.includes('中') || d.includes('一般')) return '中等';
+  if (d.includes('难') || d.includes('高') || d.includes('复杂')) return '难';
+  return '中等';
+}
+
+/**
+ * 概括化考核点：过长或过于具体的描述转为概括性短语
+ */
+function normalizePoint(point, type) {
+  if (!point) return '';
+  let p = String(point).trim();
+  // 如果超过20字，尝试去掉引号内容并截断
+  if (p.length > 20) {
+    p = p.replace(/[""""].*?[""""]/g, '');
+    p = p.replace(/['"'"'].*?['"'"']/g, '');
+    p = p.trim();
+    if (p.length > 20) {
+      p = p.substring(0, 15) + '…';
+    }
+  }
+  return p;
+}
+
+/**
+ * 标准化题型：将AI可能返回的中文题型名统一转为内部代码
+ */
+function normalizeQuestionType(type) {
+  if (!type) return 'single';
+  const t = String(type).trim();
+  if (t === 'single' || t === '单选题' || t === '单选') return 'single';
+  if (t === 'multi' || t === '多选题' || t === '多选') return 'multi';
+  if (t === 'judge' || t === '判断题' || t === '判断') return 'judge';
+  if (t === 'scenario' || t === '情境多选题' || t === '情境题' || t === '情境') return 'scenario';
+  if (t === 'qa' || t === '问答题' || t === '问答') return 'qa';
+  return 'single';
+}
+
 function genOneQuestion(mod, courseName, globalFacts, ageGroups, type, tplRound, qId, level, diffAtFn, focusDirection) {
   const modName = mod.name;
-  const facts = mod.keyFacts;
-  const listItems = mod.listItems;
-  const focus = focusDirection || '儿童表现特征与教学策略';
-
-  // 判断聚焦方向的语义类别，决定模板偏向
-  const hasPerform = /表现|特征|行为|观察|能力|发展/.test(focus);
-  const hasStrategy = /策略|方法|教学|训练|指导|干预/.test(focus);
-  const hasRule = /规律|阶段|发展|过程/.test(focus);
-  const hasMistake = /误区|错误|误解|混淆/.test(focus);
-  const hasParent = /家长|家庭|沟通|亲子/.test(focus);
-
-  // 动态选择干扰项（根据聚焦方向）
-  function distractorPool() {
-    if (hasPerform) return ['体能素质训练', '音乐节奏模仿', '绘画色彩认知', '英语口语表达', '手工制作能力'];
-    if (hasStrategy) return ['统一教学进度', '纯机械练习', '单一讲授法', '完全自由放任', '脱离情境教学'];
-    if (hasMistake) return ['先天决定论', '机械记忆法', '填鸭式教学', '一刀切要求', '完全自然成长'];
-    return ['体能素质训练', '音乐节奏模仿', '生活自理习惯', '绘画色彩认知', '英语口语表达'];
+  let facts = [...mod.keyFacts];
+  const listItems = [...mod.listItems];
+  const focus = focusDirection || '';
+  
+  // ★ 丰富知识库：事实不足时从内容和全局补充
+  if (facts.length < 3) {
+    globalFacts.forEach(f => { if (!facts.includes(f) && facts.length < 12) facts.push(f); });
   }
+  if (facts.length < 3) {
+    mod.content.split(/[。！？；]/)
+      .map(s => s.trim())
+      .filter(s => s.length >= 8 && s.length <= 80)
+      .filter(s => /是|指|包括|包含|有|为|分为|涵盖|特征|表现|能力|发展|培养|阶段|特点|规律|方法|策略|核心|要求|原则|目标|意义|标准|步骤/.test(s))
+      .forEach(s => { if (!facts.includes(s) && facts.length < 12) facts.push(s); });
+  }
+  
+  // 选取锚点事实
+  const fi = tplRound % Math.max(1, facts.length);
+  const f1 = facts[fi] || (modName + '的核心内容');
+  const f2 = facts[(fi + 1) % Math.max(1, facts.length)] || f1;
+  const f3 = facts[(fi + 2) % Math.max(1, facts.length)] || f1;
+  const subj = getFactSubject(f1);
 
-  // ===== 单选题模板 =====
+  // ===== 单选题 =====
   if (type === 'single') {
-    const templates = [
-      // 0. 表现/特征判断
-      { mk: () => {
-        if (hasPerform || hasRule) return {
-          content: `在「${modName}」的教学活动中，观察到以下哪种儿童表现最能体现该能力的发展？`,
-          options: [
-            `A. 儿童能够按照教师示范机械地复制操作方法`,
-            `B. 儿童在操作中能够灵活调整策略，并用自己的语言描述思考过程`,
-            `C. 儿童安静地听完整个活动，没有提问也没有动手`,
-            `D. 儿童反复做同一个简单操作，不愿尝试新方法`
-          ],
-          answer: 'B', point: `${modName}-典型表现识别`,
-          analysis: `在「${modName}」中，灵活调整策略并能用语言描述思考过程，说明儿童真正理解了操作背后的数学意义，是能力发展的核心表现。`
-        };
-        if (hasStrategy) return {
-          content: `关于「${modName}」的有效教学，以下策略最合理的是：`,
-          options: [
-            `A. 统一进度，要求所有儿童在同一时间完成同样的任务`,
-            `B. 提供分层操作材料，允许儿童按自己的节奏探索，教师根据观察灵活介入引导`,
-            `C. 教师详细讲解每一步操作方法，儿童严格按步骤执行`,
-            `D. 让儿童自由玩耍，教师不做任何干预和引导`
-          ],
-          answer: 'B', point: `${modName}-教学策略选择`,
-          analysis: `有效教学需要在观察儿童表现的基础上，提供差异化的支持——即"观察→判断→引导"循环。选项B体现了这一核心理念。`
-        };
+    const neg1 = negateStatement(f1);
+    const neg2 = negateStatement(f2);
+    const strategies = [
+      // 0: 哪个说法正确
+      () => {
+        const wrongPool = [neg1, neg2, f2 + '（此描述不完整）'].filter(w => w && w !== f1);
+        while (wrongPool.length < 3) wrongPool.push('与课程内容描述不符');
+        const opts = shuffleArray([f1, ...wrongPool.slice(0, 3)]);
+        const ci = opts.indexOf(f1);
         return {
-          content: `关于「${modName}」的教学，以下说法最准确的是：`,
-          options: [
-            `A. ${modName}是儿童与生俱来的本能，无需后天教育引导`,
-            `B. ${modName}需要在教学中通过观察儿童表现、针对性引导逐步发展`,
-            `C. ${modName}仅在课堂场景中体现，与日常生活无关`,
-            `D. ${modName}主要依赖反复练习和记忆，不需要理解`
-          ],
-          answer: 'B', point: `${modName}-核心理念`,
-          analysis: `${modName}的发展需要教师在关注儿童表现的基础上进行有目的的教学引导。`
+          content: '关于「' + subj + '」，以下说法正确的是：',
+          options: opts.map((o, i) => String.fromCharCode(65+i) + '. ' + o),
+          answer: String.fromCharCode(65+ci),
+          point: subj + '-事实判断',
+          analysis: '根据课程内容，' + f1
         };
-      }},
-      // 1. 教学行为判断
-      { mk: () => {
-        if (hasStrategy) return {
-          content: `在「${modName}」课堂中，教师观察到小明总是用同一种方法解题，不愿尝试其他思路。以下应对策略最恰当的是：`,
-          options: [
-            `A. 直接告诉小明他错了，要求他改用教师指定的方法`,
-            `B. 通过提问引导小明思考："还有其他方法吗？试试看会发生什么？"`,
-            `C. 忽略小明的表现，让他按自己的方式继续`,
-            `D. 要求小明反复抄写标准解法，直到记住为止`
-          ],
-          answer: 'B', point: `${modName}-教师引导策略`,
-          analysis: `当儿童表现单一解法时，教师应通过开放式提问激发儿童的多角度思考，而非强制统一或放任不管。这是聚焦儿童表现、灵活调整策略的典型教学智慧。`
-        };
-        if (hasMistake) return {
-          content: `关于「${modName}」的教学，以下哪种观点属于常见误区？`,
-          options: [
-            `A. ${modName}的发展需要结合具体操作和生活情境`,
-            `B. 儿童之间存在个体差异，需要差异化的教学支持`,
-            `C. ${modName}可以通过反复刷题来快速提升，不需要关注儿童的理解过程`,
-            `D. 教师在儿童操作过程中应及时观察并适时引导`
-          ],
-          answer: 'C', point: `${modName}-常见误区识别`,
-          analysis: `选项C属于\"刷题万能论\"误区。${modName}的培养重在理解与迁移，而非机械刷题。教师应关注儿童的思维过程，而非仅关注答案对错。`
-        };
+      },
+      // 1: 哪个说法错误
+      () => {
+        const opts = shuffleArray([neg1, f1, f2, f3]);
+        const ci = opts.indexOf(neg1);
         return {
-          content: `在「${modName}」课堂中，以下哪种教师行为最能有效促进儿童发展？`,
-          options: [
-            `A. 教师站在讲台上系统讲解，儿童安静听讲`,
-            `B. 教师创设情境，观察儿童操作过程，在关键节点提出启发性问题`,
-            `C. 教师出示标准答案，要求儿童对照检查`,
-            `D. 教师布置大量书面练习题，要求儿童课后完成`
-          ],
-          answer: 'B', point: `${modName}-有效教学行为`,
-          analysis: `选项B体现了\"以儿童表现为中心\"的教学理念——教师是观察者和引导者，而非灌输者。`
+          content: '以下关于「' + subj + '」的说法，错误的是：',
+          options: opts.map((o, i) => String.fromCharCode(65+i) + '. ' + o),
+          answer: String.fromCharCode(65+ci),
+          point: subj + '-错误辨析',
+          analysis: '"' + neg1 + '"与课程内容不符，正确说法是：' + f1
         };
-      }},
-      // 2. 发展规律
-      { mk: () => {
-        if (hasRule || hasPerform) return {
-          content: `${ageGroups[0] || '该年龄段'}儿童在「${modName}」方面的发展规律，以下说法正确的是：`,
-          options: [
-            `A. 该阶段儿童已具备完整的抽象逻辑推理能力`,
-            `B. 该阶段以具体形象思维为主，${modName}的发展需要借助实物操作`,
-            `C. 该阶段儿童的${modName}已发展完毕，不需要继续培养`,
-            `D. 该阶段完全不具备${modName}发展的基础，启蒙没有意义`
-          ],
-          answer: 'B', point: `${modName}-发展规律`,
-          analysis: `${ageGroups[0] || '该年龄段'}儿童的思维特点是以具体形象思维为主，教学应充分借助实物、教具等直观手段。`
-        };
-        return {
-          content: `下列关于「${modName}」培养时机说法正确的是：`,
-          options: [
-            `A. 必须等到儿童达到特定年龄再开始培养`,
-            `B. 在日常生活中随时可以渗透，关键是符合儿童当前发展水平`,
-            `C. 越早开始越好，不管儿童是否能理解`,
-            `D. 培养时机完全由教材决定，教师无需判断`
-          ],
-          answer: 'B', point: `${modName}-培养时机`,
-          analysis: `${modName}的培养应融入日常生活，教师的专业判断在于根据儿童当前的表现水平选择合适的介入时机。`
-        };
-      }},
-      // 3. 家长沟通（特别模板）
-      { mk: () => {
-        if (hasParent) return {
-          content: `家长问："我孩子在家里玩积木时只是随便搭，看起来没什么数学思维。"作为教师，最恰当的回应是：`,
-          options: [
-            `A. "那你要多让他做数学题，玩积木没用"`,
-            `B. "随便搭的过程中其实蕴含了空间感知和数量关系的探索，您可以尝试和他一起搭，边搭边用数学语言描述"`,
-            `C. "正常，很多孩子都这样，不用担心"`,
-            `D. "这说明孩子数学天赋一般，需要更系统的训练"`
-          ],
-          answer: 'B', point: `${modName}-家长沟通`,
-          analysis: `选项B既肯定了儿童的自由探索行为，又为家长提供了具体可操作的引导策略，体现了专业的家校沟通能力。`
-        };
-        return {
-          content: `以下哪种做法最有利于促进「${modName}」在家庭中的发展？`,
-          options: [
-            `A. 要求家长每天带孩子做20道书面数学题`,
-            `B. 引导家长在日常生活中抓住自然情境（如购物、分餐具）进行对话式数学启蒙`,
-            `C. 建议家长把辅导工作交给app或培训班`,
-            `D. 要求家长严格按照学校的进度在家同步教学`
-          ],
-          answer: 'B', point: `${modName}-家庭渗透`,
-          analysis: `日常生活中自然渗透是最有效的家庭数学启蒙方式，既不增加家长负担，又能让儿童在真实情境中发展数学思维。`
-        };
-      }}
+      },
+      // 2: 概念定义题
+      () => {
+        const valMatch = f1.match(/(?:是|是指|包括|包含|涵盖|为|分为)(.+)/);
+        if (valMatch) {
+          const correctVal = valMatch[1].trim().replace(/[。！？]+$/, '');
+          const verb = (f1.match(/(是|是指|包括|包含|涵盖|为|分为)/) || ['是'])[1];
+          const otherVals = facts.filter(f => f !== f1).map(f => {
+            const m = f.match(/(?:是|是指|包括|包含|涵盖|为|分为)(.+)/);
+            return m ? m[1].trim().replace(/[。！？]+$/, '') : null;
+          }).filter(Boolean);
+          const wrongVals = [...otherVals.slice(0, 2), '与课程内容无关的描述'].slice(0, 3);
+          const opts = shuffleArray([correctVal, ...wrongVals]);
+          const ci = opts.indexOf(correctVal);
+          return {
+            content: '「' + subj + '」' + verb + '什么？',
+            options: opts.map((o, i) => String.fromCharCode(65+i) + '. ' + o),
+            answer: String.fromCharCode(65+ci),
+            point: subj + '-概念理解',
+            analysis: '根据课程内容，' + f1
+          };
+        }
+        return strategies[0]();
+      },
+      // 3: 列表项识别题
+      () => {
+        if (listItems.length >= 3) {
+          const correctItem = listItems[tplRound % listItems.length];
+          const otherItems = listItems.filter(i => i !== correctItem);
+          const genericWrong = ['体能素质训练', '音乐节奏模仿', '绘画色彩认知', '英语口语表达', '手工制作能力'].filter(w => !listItems.includes(w));
+          const opts = shuffleArray([correctItem, ...genericWrong.slice(0, 2), otherItems.length > 0 ? otherItems[0] : (genericWrong[3] || '其他')]);
+          const ci = opts.indexOf(correctItem);
+          return {
+            content: '以下哪项属于「' + subj + '」的内容？',
+            options: opts.map((o, i) => String.fromCharCode(65+i) + '. ' + o),
+            answer: String.fromCharCode(65+ci),
+            point: subj + '-内容识别',
+            analysis: '根据课程内容，「' + subj + '」涉及' + correctItem + '等内容。'
+          };
+        }
+        return strategies[0]();
+      }
     ];
-    const available = templates.filter(t => true);
-    const tpl = available[tplRound % available.length];
-    const q = tpl.mk();
+    const q = strategies[tplRound % strategies.length]();
     return { ...q, id: qId, type: 'single', level, difficulty: diffAtFn(level), module: modName, selected: true };
   }
 
-  // ===== 多选题模板 =====
+  // ===== 多选题 =====
   if (type === 'multi') {
-    const templates = [
-      { // 0. 典型表现
-        mk: () => {
-          if (hasPerform) return {
-            content: `在「${modName}」的教学中，以下哪些儿童行为值得教师重点关注并作为能力发展的积极信号？（多选）`,
-            options: [
-              `A. 儿童在操作后能够用自己的语言描述"我是怎么想的"`,
-              `B. 儿童在遇到困难时主动尝试不同方法，而非直接求助`,
-              `C. 儿童能将课堂上学到的方法迁移到新的情境中`,
-              `D. 儿童严格记住教师教的方法，从不犯错`,
-              `E. 儿童能够指出同伴解法中的合理之处与不足之处`
-            ],
-            answer: 'ABCE', point: `${modName}-积极表现识别`,
-            analysis: `ABCE均体现了儿童的主动思考与灵活应用，而D仅反映机械记忆。教师应重点观察儿童的思维过程而非答案对错。`
-          };
-          return {
-            content: `在促进「${modName}」发展的教学中，教师应重点关注哪些方面？（多选）`,
-            options: [
-              `A. 关注儿童的思维过程，而非仅关注答案对错`,
-              `B. 提供开放性的探索空间，允许儿童用多种方法解决`,
-              `C. 尊重个体差异，提供差异化支持`,
-              `D. 严格统一教学进度，对所有人一视同仁`,
-              `E. 将抽象概念与具体操作情境相结合`
-            ],
-            answer: 'ABCE', point: `${modName}-教学关注点`,
-            analysis: `ABCE符合因材施教的教育理念。D违背了个体差异原则。`
-          };
-        }
+    const strategies = [
+      // 0: 哪些说法正确
+      () => {
+        const correctFacts = shuffleArray(facts).slice(0, Math.min(3, facts.length));
+        const wrongFacts = correctFacts.map(f => negateStatement(f));
+        const allOpts = [...correctFacts, ...wrongFacts.slice(0, 2)];
+        const shuffled = shuffleArray(allOpts);
+        const correctLetters = correctFacts.map(f => String.fromCharCode(65 + shuffled.indexOf(f))).sort().join('');
+        return {
+          content: '关于「' + subj + '」，以下哪些说法是正确的？（多选）',
+          options: shuffled.map((o, i) => String.fromCharCode(65+i) + '. ' + o),
+          answer: correctLetters,
+          point: subj + '-多项判断',
+          analysis: '根据课程内容，' + correctFacts.join('；') + '均为正确说法。'
+        };
       },
-      { // 1. 教学策略
-        mk: () => {
-          if (hasStrategy) return {
-            content: `以下哪些是教师在促进「${modName}」发展时应采用的有效策略？（多选）`,
-            options: [
-              `A. 根据儿童的表现灵活调整任务难度`,
-              `B. 为不同水平的儿童提供差异化的操作材料`,
-              `C. 在关键节点通过提问引导儿童深入思考`,
-              `D. 保持统一的教学节奏，不因个别儿童调整`,
-              `E. 创设真实或模拟的生活情境，让儿童在情境中运用所学`
-            ],
-            answer: 'ABCE', point: `${modName}-有效策略`,
-            analysis: `ABCE均为以儿童表现为中心的教学策略。D忽视了儿童的个体差异，不符合因材施教原则。`
-          };
+      // 1: 包括哪些方面
+      () => {
+        if (listItems.length >= 3) {
+          const correctItems = listItems.slice(0, Math.min(4, listItems.length));
+          const genericWrong = ['体能素质训练', '音乐节奏模仿', '绘画色彩认知', '英语口语表达', '手工制作能力'].filter(w => !listItems.includes(w));
+          const wrongItems = genericWrong.slice(0, 2);
+          const allOpts = [...correctItems, ...wrongItems];
+          const shuffled = shuffleArray(allOpts);
+          const correctLetters = correctItems.map(i => String.fromCharCode(65 + shuffled.indexOf(i))).sort().join('');
           return {
-            content: `良好的「${modName}」教学应具备哪些特征？（多选）`,
-            options: [
-              `A. 教学素材贴近儿童生活经验`,
-              `B. 为儿童提供充足的动手操作机会`,
-              `C. 教师能根据课堂中儿童的实时反馈灵活调整教学`,
-              `D. 以标准化的书面测试作为唯一评价方式`,
-              `E. 鼓励儿童表达自己的思考过程`
-            ],
-            answer: 'ABCE', point: `${modName}-教学特征`,
-            analysis: `ABCE体现了以儿童为中心的教学理念。D过于单一，忽略了过程性评价的价值。`
+            content: '「' + subj + '」包括以下哪些方面？（多选）',
+            options: shuffled.map((o, i) => String.fromCharCode(65+i) + '. ' + o),
+            answer: correctLetters,
+            point: subj + '-内容包含',
+            analysis: '根据课程内容，「' + subj + '」包括' + correctItems.join('、') + '等方面。'
           };
         }
+        return strategies[0]();
       }
     ];
-    const tpl = templates[tplRound % templates.length];
-    const q = tpl.mk();
+    const q = strategies[tplRound % strategies.length]();
     return { ...q, id: qId, type: 'multi', level, difficulty: diffAtFn(level), module: modName, selected: true };
   }
 
-  // ===== 判断题模板 =====
+  // ===== 判断题 =====
   if (type === 'judge') {
-    const templates = [
-      { mk: () => ({
-        content: hasMistake
-          ? `判断以下观点："${modName}"发展的好坏主要取决于儿童的天赋，后天的教学环境对其影响不大。`
-          : `在「${modName}」教学中，教师应更多关注儿童的解题结果而非思考过程。`,
+    const strategies = [
+      // 0: 错误陈述（取否定）
+      () => ({
+        content: negateStatement(f1),
         options: ['A. 正确', 'B. 错误'],
-        answer: '错误', point: `${modName}-核心理念辨析`,
-        analysis: hasMistake
-          ? `该观点属于\"天赋决定论\"误区。研究表明，适宜的教学环境和教师的专业引导对儿童${modName}的发展具有关键作用。`
-          : `教师应关注儿童的思维过程，理解儿童的解题策略与困难之处，而非仅看结果对错。`
-      })},
-      { mk: () => ({
-        content: hasStrategy
-          ? `在「${modName}」教学中，教师发现儿童操作方式单一时，最佳做法是立即示范正确方法并要求儿童模仿。`
-          : `${ageGroups[0] || '该年龄段'}儿童在「${modName}」方面已经具备了完整的抽象思维能力，教学可以完全脱离具体操作。`,
+        answer: '错误',
+        point: subj + '-错误辨析',
+        analysis: '该说法与课程内容不符。正确说法是：' + f1
+      }),
+      // 1: 正确陈述
+      () => ({
+        content: f1,
         options: ['A. 正确', 'B. 错误'],
-        answer: '错误', point: `${modName}-教学理念`,
-        analysis: hasStrategy
-          ? `立即示范会剥夺儿童的探索机会。更好的做法是先观察分析儿童为何只用单一方法，然后通过启发性提问引导儿童发现更多可能性。`
-          : `儿童思维发展具有阶段性，教学需基于其当前发展水平，提供适宜的实物操作支持。`
-      })},
-      { mk: () => ({
-        content: `有效的「${modName}」教学应当将课堂活动与儿童的生活经验紧密联系，让儿童在熟悉的场景中自然发展相关能力。`,
+        answer: '正确',
+        point: subj + '-事实判断',
+        analysis: '该说法与课程内容一致。'
+      }),
+      // 2: 用第二个事实的否定
+      () => {
+        const modified = negateStatement(f2);
+        return {
+          content: modified,
+          options: ['A. 正确', 'B. 错误'],
+          answer: '错误',
+          point: getFactSubject(f2) + '-错误辨析',
+          analysis: '该说法与课程内容不符。正确说法是：' + f2
+        };
+      },
+      // 3: 用第三个事实的正确陈述
+      () => ({
+        content: f3,
         options: ['A. 正确', 'B. 错误'],
-        answer: '正确', point: `${modName}-生活化教学`,
-        analysis: `生活化教学是${courseName}的重要理念，有助于儿童将抽象知识迁移到真实情境中。`
-      })}
+        answer: '正确',
+        point: getFactSubject(f3) + '-事实判断',
+        analysis: '该说法与课程内容一致。'
+      })
     ];
-    const tpl = templates[tplRound % templates.length];
-    const q = tpl.mk();
+    const q = strategies[tplRound % strategies.length]();
     return { ...q, id: qId, type: 'judge', level, difficulty: diffAtFn(level), module: modName, selected: true };
   }
 
-  // ===== 情境多选题模板 =====
-  // 给出一个复杂但典型的教学/儿童发展情境，让回答者选出所有合适的做法
+  // ===== 情境多选题 =====
   if (type === 'scenario') {
-    const ageRange = ageGroups[0] || '该年龄段';
-    const fact1 = facts[0] || `${modName}需要教师的观察和引导`;
-    const fact2 = facts[1] || fact1;
-
-    const templates = [
-      // 0. 课堂教学情境：观察+应对
-      { mk: () => ({
-        content: `在一次「${modName}」的课堂教学活动中，你观察到以下现象：${ageRange}的儿童A在操作材料时反复尝试不同的方法，虽然偶尔出错但一直在调整；儿童B严格按照老师示范的方式操作，从不主动尝试新方法；儿童C则显得无所适从，看着材料迟迟不动手。
-
-面对这三种不同的表现，作为教师，以下哪些做法是合适的？（多选）`,
+    const fact1 = f1;
+    const fact2 = f2;
+    const age = (ageGroups && ageGroups[0]) ? ageGroups[0] : '相关年龄段';
+    const strategies = [
+      // 0: 教学情境（概念混淆）
+      () => ({
+        content: '在一次关于「' + subj + '」的教学中，你观察到以下情况：部分学员能够理解课程中提到的"' + fact1 + '"，但有些学员在应用时出现了偏差，混淆了相关概念。\n\n面对这种情况，作为教师，以下哪些做法是合适的？（多选）',
         options: [
-          'A. 对儿童A，肯定其探索精神，并在其遇到瓶颈时以提问引导："你试了几种方法？哪种最快？为什么？"',
-          'B. 对儿童B，批评其缺乏创造力，要求他必须尝试与示范不同的方法',
-          'C. 对儿童B，先认可其规范操作的能力，然后逐步引导："你做得很好，我们来试试有没有其他方法也能完成？"',
-          'D. 对儿童C，立即手把手地帮他完成操作，确保跟上班上进度',
-          'E. 对儿童C，先通过一个更简单的同类任务建立信心，再逐步引导到当前任务'
+          'A. 根据课程内容重新梳理"' + getFactSubject(fact1) + '"的核心要点，帮助学员澄清概念',
+          'B. 忽略理解偏差，继续按原计划推进教学',
+          'C. 设计针对性的练习或案例，让学员在实践中区分易混淆的概念',
+          'D. 直接告诉学员正确答案，不需要他们自己思考',
+          'E. 结合"' + getFactSubject(fact2) + '"的相关内容，帮助学员建立知识间的联系'
         ],
         answer: 'ACE',
-        keywords: `${modName};差异教学;课堂观察`,
-        point: `${modName}-教学情境应对`,
-        analysis: `本题考查分层教学理念：对探索型儿童（A）应通过提问深化思考；对规范型儿童（B）应先认可再拓展，而非批评；对迟疑型儿童（C）应降低起点建立信心，而非包办代替。` + `核心理念：${fact1}。`
-      })},
-      // 1. 家庭教育/家校沟通情境
-      { mk: () => ({
-        content: `一位${ageRange}儿童的家长向你求助："我家孩子最近对数学特别抵触，一说要做数学题就哭。我试了奖励（做完给零食）、也试了惩罚（不做完不许看动画片），都没用。老师，我该怎么办？"
-
-结合「${modName}」的专业知识，以下哪些建议是合适的？（多选）`,
+        keywords: subj + ';概念辨析;教学应对',
+        point: subj + '-教学情境应对',
+        analysis: '当学员出现概念混淆时，教师应：①重新梳理核心要点澄清概念（A）；②设计针对性练习让学员在实践中辨析（C）；③建立知识间的联系帮助理解（E）。而B忽视了学员的困难，D剥夺了学员的思考机会。'
+      }),
+      // 1: 误区辨析情境
+      () => ({
+        content: '在「' + subj + '」的实际应用中，一位同事提出了以下观点："' + negateStatement(fact1) + '"。\n\n结合课程内容，以下哪些分析是正确的？（多选）',
         options: [
-          'A. 建议家长暂停所有数学练习，等孩子情绪平复后再重新开始',
-          'B. 告诉家长奖励和惩罚都是无效的激励方式，可能加剧孩子的焦虑和抵触',
-          'C. 建议将数学融入日常游戏（如数楼梯、分水果），让孩子在自然情境中体验数学的有趣',
-          'D. 建议增加练习量，让孩子尽快"脱敏"适应数学',
-          'E. 建议关注孩子"做对"的过程而非"做完"的结果，及时给予具体积极的反馈'
+          'A. 该观点与课程内容不符',
+          'B. 根据课程内容，正确的理解应该是"' + fact1 + '"',
+          'C. 该观点部分正确，只需稍作修正即可',
+          'D. 这种观点可能导致实际工作中的偏差',
+          'E. 应该结合"' + getFactSubject(fact2) + '"的内容来全面理解这个问题'
         ],
-        answer: 'BCE',
-        keywords: `${modName};家长沟通;学习动机`,
-        point: `${modName}-家校共育策略`,
-        analysis: `儿童对数学的抵触情绪往往源于负面体验的积累。` + `${fact1}。外部奖惩会破坏内在动机；游戏化渗透和在过程中给予积极反馈是更有效的方式。`
-      })},
-      // 2. 综合教学策略选择
-      { mk: () => ({
-        content: `你所在的教研组正在讨论「${modName}」的教学方案。组里有几种不同观点：
-- 观点一：应该统一教学进度，确保所有儿童都达到同样的标准
-- 观点二：应该完全放手，让儿童自主探索，教师不做干预
-- 观点三：应该在观察儿童表现的基础上，根据不同发展水平提供差异化支持
-
-作为有经验的教师，你认为以下哪些做法最符合「${modName}」的有效教学原则？（多选）`,
-        options: [
-          'A. 课前通过简单任务评估每个儿童的当前发展水平，据此设计分层目标',
-          'B. 统一使用标准化教案，所有班级同步推进',
-          'C. 教学中持续观察记录，根据即时表现灵活调整互动方式',
-          'D. 完全让儿童自由活动，不设定任何教学目标',
-          'E. 定期对儿童的作品和操作过程进行记录分析，作为后续教学设计的依据'
-        ],
-        answer: 'ACE',
-        keywords: `${modName};教学设计;差异化`,
-        point: `${modName}-有效教学原则`,
-        analysis: `有效教学需要在观察、评估、设计、调整之间形成闭环。` + `${fact2}。选项ACE体现了"评估→观察→调整"的动态教学循环，B和D分别走向了标准化和放任两个极端。`
-      })},
-      // 3. 常见误区辨析
-      { mk: () => ({
-        content: `一位新教师在「${modName}」的教学反思中写道："我发现班里有个孩子总是'说不清楚'自己的思考过程，即使做对了也说不出为什么。我要求他每次做完题目后必须完整陈述解题步骤，但他越来越抗拒。"
-
-结合${ageRange}儿童的发展特点，以下分析哪些是正确的？（多选）`,
-        options: [
-          'A. 该儿童可能处于"能操作但无法清晰表达"的阶段，这是发展中常见的过渡状态',
-          'B. 儿童说不出过程说明他其实不理解，应该先暂停该领域的学习，回到前一个阶段',
-          'C. 可以用"你能指给我看你是怎么做的吗"替代"你说说为什么"，降低表达门槛',
-          'D. 硬性要求口头表达会增加儿童的挫败感，应该根据儿童的语言发展水平灵活调整',
-          'E. 这属于学习态度问题，应该加强纪律要求促使其改进'
-        ],
-        answer: 'ACD',
-        keywords: `${modName};发展规律;常见误区`,
-        point: `${modName}-儿童发展阶段辨识`,
-        analysis: '操作能力早于语言表达能力是儿童发展中常见的现象。' + `${fact1}。教师应尊重发展节奏，用多元化表达方式替代单一的口头陈述要求。`
-      })}
+        answer: 'ABDE',
+        keywords: subj + ';误区辨析;正确理解',
+        point: subj + '-观点辨析',
+        analysis: '该观点与课程内容不符（A），正确的理解是' + fact1 + '（B），这种误解可能导致实际偏差（D），应结合相关知识全面理解（E）。C错误是因为该观点整体与课程内容矛盾，而非只需微调。'
+      })
     ];
-
-    const tpl = templates[tplRound % templates.length];
-    const q = tpl.mk();
+    const q = strategies[tplRound % strategies.length]();
     return { ...q, id: qId, type: 'scenario', level, difficulty: diffAtFn(level), module: modName, selected: true };
   }
 
-  // ===== 问答题模板 =====
+  // ===== 问答题 =====
   if (type === 'qa') {
-    const fact1 = facts[0] || `${modName}的核心原理`;
-    const fact2 = facts[1] || fact1;
-    const templates = [
-      { mk: () => ({
-        content: `请简述「${fact1}」在${modName}教学中的重要意义，并举例说明教师应如何在课堂中加以运用。`,
-        answer: `参考要点：①${fact1}的定义与核心内涵；②对儿童发展的影响（认知/情感/社会性）；③教师在课堂中的具体应用策略；④注意事项或常见误区。`,
-        analysis: `本题考查对${modName}核心概念的理解及其教学应用能力，需结合理论与实践作答。`,
-        point: `${modName}·理论应用`
-      })},
-      { mk: () => ({
-        content: `在${modName}的学习与教学中，教师常面临${fact2}相关的挑战。请分析其原因，并提出2-3条切实可行的应对策略。`,
-        answer: `参考要点：①描述${fact2}相关挑战的具体表现；②分析形成原因（儿童发展规律/环境因素）；③提出策略（至少2条，需具体可操作）；④策略的预期效果。`,
-        analysis: `本题考查教师对${modName}实际教学问题的分析与解决能力，答案无唯一标准，言之有理即可。`,
-        point: `${modName}·问题解决`
-      })},
-      { mk: () => ({
-        content: `结合课程内容，请用自己的语言解释「${fact1}」与「${fact2}」的关系，并说明二者在儿童教育实践中如何相互影响。`,
-        answer: `参考要点：①分别解释${fact1}和${fact2}的含义；②阐述两者的联系（相互促进/递进关系等）；③举出教育实践中的具体案例；④对教师工作的启示。`,
-        analysis: `本题考查对课程核心概念之间关系的深度理解，需体现系统性思维。`,
-        point: `${modName}·概念整合`
-      })}
+    const strategies = [
+      () => ({
+        content: '请简述「' + subj + '」的核心内容，并结合课程内容说明其在实际教学中的应用。',
+        answer: '参考要点：①' + f1 + '；②' + f2 + '；③在实际教学中，应注重观察和引导，将理论知识与教学实践相结合；④注意事项或常见误区。',
+        analysis: '本题考查对「' + subj + '」的理解及其教学应用能力，需结合课程内容与实际经验作答。',
+        point: subj + '·理论应用'
+      }),
+      () => ({
+        content: '课程中提到"' + f1 + '"，请结合实际经验，分析如何将这一知识点应用到工作中。',
+        answer: '参考要点：①' + f1 + '的核心含义；②在实际工作中的具体应用方式；③应用时需要注意的问题；④预期的效果。',
+        analysis: '本题考查将理论知识转化为实践的能力，需体现理论与实践的结合。',
+        point: subj + '·实践应用'
+      }),
+      () => ({
+        content: '比较"' + getFactSubject(f1) + '"与"' + getFactSubject(f2) + '"的异同，并说明二者在实际工作中的关联。',
+        answer: '参考要点：①分别阐述两者的含义；②分析二者的联系与区别；③说明在实际工作中的相互关系；④对工作的启示。',
+        analysis: '本题考查对课程核心概念之间关系的深度理解，需体现系统性思维。',
+        point: subj + '·概念整合'
+      })
     ];
-    const tpl = templates[qId % templates.length];
-    const q = tpl.mk();
+    const q = strategies[qId % strategies.length]();
     return { ...q, id: qId, type: 'qa', level, difficulty: diffAtFn(level), module: modName, selected: true, options: [] };
   }
 
@@ -2028,10 +2080,17 @@ function autoCompose() {
   const multis = state.questionBank.filter(q => q.type === 'multi').slice(0, 3);
   const judges = state.questionBank.filter(q => q.type === 'judge').slice(0, 2);
   const scenarios = state.questionBank.filter(q => q.type === 'scenario').slice(0, 1);
-  [...singles, ...multis, ...judges, ...scenarios].forEach(q => state.selectedForExam.add(q.id));
+  const qas = state.questionBank.filter(q => q.type === 'qa').slice(0, 1);
+  const selected = [...singles, ...multis, ...judges, ...scenarios, ...qas];
+  selected.forEach(q => state.selectedForExam.add(q.id));
   renderCompose();
   updateBadges();
-  showToast('✅ 已按标准分配自动组卷（10题）', 'success');
+  const actualCount = selected.length;
+  if (actualCount === 0) {
+    showToast('⚠️ 题库中没有符合条件的题目', 'warning');
+  } else {
+    showToast('✅ 已按标准分配自动组卷（' + actualCount + '题）', 'success');
+  }
 }
 
 function goToExport() {
@@ -2318,8 +2377,8 @@ function editQuestion(id, context) {
       <div class="form-group">
         <label class="form-label">难易度标注</label>
         <select class="form-select" id="edit-difficulty">
-          <option value="易" ${q.difficulty==='易'?'selected':''}>易</option>
-          <option value="中" ${q.difficulty==='中'?'selected':''}>中</option>
+          <option value="简单" ${q.difficulty==='简单'?'selected':''}>简单</option>
+          <option value="中等" ${q.difficulty==='中等'?'selected':''}>中等</option>
           <option value="难" ${q.difficulty==='难'?'selected':''}>难</option>
         </select>
       </div>
@@ -2404,7 +2463,8 @@ async function regenerateOne(id) {
       // Call AI for single question
       const prompt = `根据以下课程内容，重新生成一道 ${q.type === 'single' ? '单选题' : q.type === 'multi' ? '多选题' : q.type === 'judge' ? '判断题' : '情境多选题'}（${q.level}难度）。
 课程内容：${state.courseContent.substring(0, 1000)}
-以JSON格式返回：{"type":"${q.type}","level":"${q.level}","content":"","options":[],"answer":"","point":"","analysis":"","difficulty":"","keywords":""}`;
+以JSON格式返回：{"type":"${q.type}","level":"${q.level}","content":"","options":[],"answer":"","point":"","analysis":"","difficulty":"","keywords":""}
+注意：difficulty只能填"简单""中等""难"之一；point用6-12字概括性短语，不要引用原文。`;
       const response = await fetch(state.settings.apiBaseUrl + '/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.settings.apiKey },
@@ -2415,7 +2475,16 @@ async function regenerateOne(id) {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        newQ = { ...parsed, id: q.id, module: q.module, inBank: q.inBank, selected: q.selected };
+        newQ = {
+          ...parsed,
+          type: normalizeQuestionType(parsed.type || q.type),
+          difficulty: normalizeDifficulty(parsed.difficulty),
+          point: normalizePoint(parsed.point, parsed.type || q.type),
+          id: q.id,
+          module: q.module,
+          inBank: q.inBank,
+          selected: q.selected
+        };
       }
     }
     
@@ -2643,7 +2712,6 @@ async function testApi() {
 
 function setPreset(type) {
   const presets = {
-    openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o', demo: false },
     deepseek: { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', demo: false },
     qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo', demo: false },
     demo: { url: 'https://demo.example.com/v1', model: 'demo', demo: true }
