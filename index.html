@@ -1,0 +1,2763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能出题系统</title>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.iife.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- PDF 解析 -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<!-- ZIP / PPTX 解析 -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  :root {
+    --primary: #4F46E5;
+    --primary-light: #EEF2FF;
+    --primary-dark: #3730A3;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-500: #6B7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; background: #F0F2F8; color: var(--gray-900); min-height: 100vh; }
+
+  /* Layout */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 240px; background: #fff; border-right: 1px solid var(--gray-200); padding: 24px 0; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 100; box-shadow: 2px 0 12px rgba(0,0,0,0.04); }
+  .main { margin-left: 240px; flex: 1; padding: 32px; min-height: 100vh; }
+
+  /* Sidebar */
+  .logo { padding: 0 24px 24px; border-bottom: 1px solid var(--gray-100); }
+  .logo h1 { font-size: 18px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  .logo p { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
+  .nav { padding: 16px 12px; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--gray-700); transition: all 0.2s; margin-bottom: 4px; }
+  .nav-item:hover { background: var(--primary-light); color: var(--primary); }
+  .nav-item.active { background: var(--primary); color: #fff; }
+  .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+  .nav-badge { background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-left: auto; }
+  .nav-badge.green { background: var(--success); }
+
+  /* Pages */
+  .page { display: none; }
+  .page.active { display: block; }
+  .page-header { margin-bottom: 28px; }
+  .page-header h2 { font-size: 24px; font-weight: 700; color: var(--gray-900); }
+  .page-header p { color: var(--gray-500); font-size: 14px; margin-top: 6px; }
+
+  /* Cards */
+  .card { background: #fff; border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); }
+  .card + .card { margin-top: 20px; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .card-title { font-size: 16px; font-weight: 600; color: var(--gray-900); display: flex; align-items: center; gap: 8px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; text-decoration: none; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79,70,229,0.3); }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover { background: #059669; transform: translateY(-1px); }
+  .btn-outline { background: #fff; color: var(--gray-700); border: 1px solid var(--gray-300); }
+  .btn-outline:hover { background: var(--gray-50); border-color: var(--primary); color: var(--primary); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: #DC2626; }
+  .btn-warning { background: var(--warning); color: #fff; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; }
+  .btn-lg { padding: 13px 28px; font-size: 15px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+  /* Upload area */
+  .upload-area { border: 2px dashed var(--gray-300); border-radius: var(--radius); padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.3s; background: var(--gray-50); }
+  .upload-area:hover, .upload-area.dragover { border-color: var(--primary); background: var(--primary-light); }
+  .upload-icon { font-size: 48px; margin-bottom: 16px; }
+  .upload-area h3 { font-size: 16px; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; }
+  .upload-area p { font-size: 13px; color: var(--gray-500); }
+  .upload-area input { display: none; }
+  .file-preview { margin-top: 16px; background: var(--primary-light); border: 1px solid #C7D2FE; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+  .file-preview-icon { font-size: 24px; }
+  .file-preview-info h4 { font-size: 14px; font-weight: 600; color: var(--primary-dark); }
+  .file-preview-info p { font-size: 12px; color: var(--gray-500); }
+
+  /* AI Config */
+  .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1/-1; }
+  .form-label { font-size: 13px; font-weight: 500; color: var(--gray-700); }
+  .form-input { padding: 10px 14px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; outline: none; transition: border 0.2s; background: #fff; }
+  .form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+  .form-select { padding: 10px 14px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; outline: none; background: #fff; cursor: pointer; }
+  .form-textarea { padding: 10px 14px; border: 1px solid var(--gray-300); border-radius: 8px; font-size: 14px; outline: none; resize: vertical; min-height: 100px; transition: border 0.2s; }
+  .form-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
+
+  /* Standards display */
+  .standards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .standard-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .standard-table th { background: var(--primary); color: #fff; padding: 10px 12px; text-align: center; font-weight: 600; }
+  .standard-table td { padding: 9px 12px; border-bottom: 1px solid var(--gray-100); text-align: center; }
+  .standard-table tr:hover td { background: var(--primary-light); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .badge-l1 { background: #D1FAE5; color: #065F46; }
+  .badge-l2 { background: #FEF3C7; color: #92400E; }
+  .badge-l3 { background: #FEE2E2; color: #991B1B; }
+
+  /* Standards slider */
+  .std-slider { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; background: var(--gray-200); outline: none; cursor: pointer; }
+  .std-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--primary); cursor: pointer; box-shadow: 0 1px 4px rgba(79,70,229,0.3); }
+  .std-slider::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--primary); cursor: pointer; border: none; }
+
+  /* Question cards */
+  .question-list { display: flex; flex-direction: column; gap: 16px; }
+  .question-card { background: #fff; border-radius: var(--radius); padding: 20px; border: 2px solid var(--gray-200); transition: all 0.2s; position: relative; }
+  .question-card:hover { border-color: var(--primary); box-shadow: 0 4px 16px rgba(79,70,229,0.08); }
+  .question-card.selected { border-color: var(--success); background: #F0FDF4; }
+  .question-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .tag-type-single { background: #EDE9FE; color: #5B21B6; }
+  .tag-type-multi { background: #FEF3C7; color: #92400E; }
+  .tag-type-judge { background: #D1FAE5; color: #065F46; }
+  .tag-type-scenario { background: #DBEAFE; color: #1E40AF; }
+  .tag-type-qa { background: #F3E8FF; color: #6B21A8; }
+  .tag-l1 { background: #D1FAE5; color: #065F46; }
+  .tag-l2 { background: #FEF3C7; color: #92400E; }
+  .tag-l3 { background: #FEE2E2; color: #991B1B; }
+  .question-num { font-size: 13px; font-weight: 700; color: var(--gray-500); }
+  .question-content { font-size: 15px; font-weight: 500; color: var(--gray-900); line-height: 1.6; margin-bottom: 12px; }
+  .options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .option { font-size: 14px; color: var(--gray-700); padding: 4px 0; }
+  .option.correct { color: var(--success); font-weight: 600; }
+  .answer-info { background: var(--gray-50); border-radius: 8px; padding: 12px; font-size: 13px; color: var(--gray-700); line-height: 1.8; }
+  .answer-info strong { color: var(--gray-900); }
+  .question-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .check-select { position: absolute; top: 16px; right: 16px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--gray-300); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 13px; }
+  .check-select.checked { background: var(--success); border-color: var(--success); color: #fff; }
+
+  /* Editing mode */
+  .edit-mode .question-content-input { width: 100%; padding: 10px; border: 1px solid var(--primary); border-radius: 8px; font-size: 15px; resize: vertical; min-height: 60px; }
+  .edit-mode .option-input { width: 100%; padding: 7px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 14px; margin-bottom: 6px; }
+
+  /* Progress */
+  .progress-bar { height: 6px; background: var(--gray-200); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--primary); border-radius: 3px; transition: width 0.5s; }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: #fff; border-radius: var(--radius); padding: 20px; text-align: center; box-shadow: var(--shadow); }
+  .stat-num { font-size: 32px; font-weight: 700; color: var(--primary); }
+  .stat-label { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
+
+  /* Loading overlay */
+  .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
+  .loading-overlay.show { display: flex; }
+  .loading-box { background: #fff; border-radius: 16px; padding: 40px; text-align: center; max-width: 360px; width: 90%; }
+  .loading-spinner { width: 48px; height: 48px; border: 4px solid var(--gray-200); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-box h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .loading-box p { font-size: 13px; color: var(--gray-500); }
+  .loading-steps { margin-top: 16px; text-align: left; }
+  .loading-step { font-size: 13px; color: var(--gray-500); padding: 4px 0; display: flex; align-items: center; gap: 8px; }
+  .loading-step.done { color: var(--success); }
+  .loading-step.active { color: var(--primary); font-weight: 500; }
+
+  /* Toast */
+  .toast-container { position: fixed; top: 24px; right: 24px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: #fff; border-radius: 10px; padding: 12px 18px; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; animation: slideIn 0.3s; min-width: 260px; border-left: 4px solid var(--success); }
+  .toast.error { border-left-color: var(--danger); }
+  .toast.warning { border-left-color: var(--warning); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* Compose page */
+  .compose-layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+  .compose-sidebar { position: sticky; top: 20px; }
+  .exam-info-card { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff; border-radius: var(--radius); padding: 24px; }
+  .exam-info-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .exam-stat { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.2); font-size: 14px; }
+  .exam-stat:last-child { border-bottom: none; }
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--gray-300); background: #fff; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+  .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* Export page */
+  .export-preview { background: #fff; border-radius: var(--radius); padding: 32px; max-width: 700px; margin: 0 auto; box-shadow: var(--shadow); font-family: 'SimSun', serif; }
+  .preview-title { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 8px; }
+  .preview-subtitle { font-size: 14px; text-align: center; color: var(--gray-500); margin-bottom: 24px; }
+  .preview-question { margin-bottom: 20px; }
+  .preview-question-title { font-size: 14px; line-height: 1.8; }
+  .preview-option { font-size: 14px; padding: 2px 0; }
+  .preview-meta { font-size: 13px; color: var(--gray-500); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 500; display: none; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: #fff; border-radius: 16px; padding: 32px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+  .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+  /* Divider */
+  .divider { border: none; border-top: 1px solid var(--gray-200); margin: 20px 0; }
+
+  /* Alert */
+  .alert { padding: 14px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px; }
+  .alert-info { background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E40AF; }
+  .alert-warning { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
+  .alert-success { background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); }
+    .main { margin-left: 0; padding: 16px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .standards-grid, .compose-layout, .config-grid { grid-template-columns: 1fr; }
+  }
+
+  .section-title { font-size: 14px; font-weight: 600; color: var(--gray-700); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--primary-light); }
+
+  .step-indicator { display: flex; align-items: center; gap: 0; margin-bottom: 28px; }
+  .step { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--gray-400); }
+  .step.active { color: var(--primary); }
+  .step.done { color: var(--success); }
+  .step-circle { width: 28px; height: 28px; border-radius: 50%; border: 2px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .step-done { background: var(--success); border-color: var(--success); color: #fff; }
+  .step-line { flex: 1; height: 2px; background: var(--gray-200); max-width: 60px; }
+  .step-line.done { background: var(--success); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <h1>🎓 智能出题系统</h1>
+      <p>AI驱动 · 专业规范</p>
+    </div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="navigate('upload')" id="nav-upload">
+        <span class="icon">📁</span>上传课程内容
+      </div>
+      <div class="nav-item" onclick="navigate('generate')" id="nav-generate">
+        <span class="icon">🤖</span>AI智能出题
+        <span class="nav-badge green" id="badge-questions" style="display:none">0</span>
+      </div>
+      <div class="nav-item" onclick="navigate('bank')" id="nav-bank">
+        <span class="icon">📚</span>题库管理
+        <span class="nav-badge" id="badge-bank" style="display:none">0</span>
+      </div>
+      <div class="nav-item" onclick="navigate('compose')" id="nav-compose">
+        <span class="icon">📝</span>组卷中心
+        <span class="nav-badge green" id="badge-compose" style="display:none">0</span>
+      </div>
+      <div class="nav-item" onclick="navigate('export')" id="nav-export">
+        <span class="icon">📤</span>导出试卷
+      </div>
+      <div class="nav-item" onclick="navigate('settings')" id="nav-settings">
+        <span class="icon">⚙️</span>AI配置
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- Upload Page -->
+    <div class="page active" id="page-upload">
+      <div class="page-header">
+        <h2>📁 上传课程内容</h2>
+        <p>支持上传文档、PPT、文本等格式，AI将自动提取内容并生成考试题目</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📎 上传课程文件</span>
+        </div>
+        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <div class="upload-icon">📂</div>
+          <h3>点击上传或拖拽文件至此处</h3>
+          <p>支持 .txt / .docx / .pdf（文本型）/ .pptx / .html 等格式</p>
+          <p style="margin-top:8px;font-size:12px;color:#9CA3AF;">提示：视频文件请先转为文字稿后上传</p>
+          <input type="file" id="fileInput" accept=".txt,.docx,.pdf,.md,.pptx,.html,.htm" onchange="handleFileUpload(event)">
+        </div>
+        <div id="filePreview" style="display:none" class="file-preview">
+          <span class="file-preview-icon" id="fileIcon">📄</span>
+          <div class="file-preview-info">
+            <h4 id="fileName">课程文件.docx</h4>
+            <p id="fileSize">大小：--</p>
+          </div>
+          <span style="margin-left:auto;cursor:pointer;color:var(--danger)" onclick="clearFile()">✕ 移除</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">✏️ 或直接输入/粘贴课程内容</span>
+        </div>
+        <textarea class="form-textarea" id="courseContent" placeholder="请在此粘贴课程讲义、教材段落、培训材料等文字内容..." style="min-height:300px;width:100%"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+          <span id="contentStats" style="font-size:13px;color:var(--gray-500)">字数：0</span>
+          <button class="btn btn-primary" onclick="navigate('generate')">继续出题 →</button>
+        </div>
+      </div>
+
+      <!-- Standards Preview -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📋 出题规范预览</span>
+          <button class="btn btn-outline btn-sm" onclick="navigate('settings')">⚙️ 修改配置</button>
+        </div>
+        <div class="standards-grid" id="standardsPreviewGrid">
+          <!-- 由 renderStandardsPreview() 动态渲染 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Generate Page -->
+    <div class="page" id="page-generate">
+      <div class="page-header">
+        <h2>🤖 AI智能出题</h2>
+        <p>基于课程内容，按照规范自动生成题目</p>
+      </div>
+
+      <div class="card" id="generateControl">
+        <div class="card-header">
+          <span class="card-title">🎯 出题参数设置</span>
+        </div>
+        <div class="config-grid">
+          <div class="form-group">
+            <label class="form-label">模块名称</label>
+            <input type="text" class="form-input" id="moduleName" placeholder="如：第一模块 - 基础概念" value="第一模块">
+          </div>
+          <div class="form-group">
+            <label class="form-label">出题数量</label>
+            <select class="form-select" id="questionCount">
+              <option value="10" selected>10题（标准模块）</option>
+              <option value="20">20题（双倍题库）</option>
+              <option value="30">30题（完整题库）</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">内容预览</label>
+            <div style="padding:10px;background:var(--gray-50);border-radius:8px;font-size:13px;color:var(--gray-600);border:1px solid var(--gray-200);min-height:40px;max-height:80px;overflow:hidden;text-overflow:ellipsis" id="contentPreview">（未输入课程内容）</div>
+          </div>
+          <div class="form-group full">
+            <label class="form-label">📦 内容分区</label>
+            <div style="padding:8px 12px;background:var(--gray-50);border-radius:8px;font-size:13px;border:1px solid var(--gray-200);min-height:32px" id="moduleInfo">（输入内容后自动分为4部分）</div>
+            <div style="margin-top:4px"><a href="#" onclick="showDiagModal()" style="font-size:11px;color:var(--primary);text-decoration:none">🔍 查看分区详情 →</a></div>
+          </div>
+          <div class="form-group full">
+            <label class="form-label">🎯 出题聚焦方向 <span style="font-weight:400;color:var(--gray-500);font-size:12px">（题目围绕什么核心主题出题）</span></label>
+            <input type="text" class="form-input" id="focusDirection" placeholder="如：儿童表现特征与教学策略、课堂观察要点、发展阶段特征" value="儿童表现特征与教学策略">
+            <div style="font-size:11px;color:var(--gray-500);margin-top:2px">💡 例如：儿童表现特征、教学策略、发展规律、常见误区、家长沟通要点</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">AI模型</label>
+            <div style="padding:10px;background:var(--gray-50);border-radius:8px;font-size:13px;border:1px solid var(--gray-200)">
+              <span id="modelDisplay">🟢 已配置</span>
+            </div>
+          </div>
+        </div>
+        <hr class="divider">
+        <div style="display:flex;gap:12px;align-items:center">
+          <button class="btn btn-primary btn-lg" id="generateBtn" onclick="startGenerate()">
+            ✨ 开始AI出题
+          </button>
+          <button class="btn btn-outline" onclick="navigate('upload')">← 返回修改内容</button>
+          <span id="generateStatus" style="font-size:13px;color:var(--gray-500)"></span>
+        </div>
+      </div>
+
+      <!-- Questions Result -->
+      <div id="questionsResult" style="display:none">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-num" id="stat-total">0</div>
+            <div class="stat-label">题目总数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" style="color:var(--success)" id="stat-types">4</div>
+            <div class="stat-label">题型种类</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" style="color:var(--warning)" id="stat-levels">3</div>
+            <div class="stat-label">难度等级</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" style="color:var(--danger)" id="stat-selected">0</div>
+            <div class="stat-label">已选组卷</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 生成结果</span>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline btn-sm" onclick="selectAll()">全选</button>
+              <button class="btn btn-outline btn-sm" onclick="deselectAll()">取消全选</button>
+              <button class="btn btn-success btn-sm" onclick="addSelectedToBank()">➕ 加入题库</button>
+              <button class="btn btn-warning btn-sm" onclick="startGenerate()">🔄 重新出题</button>
+            </div>
+          </div>
+          <div class="question-list" id="questionList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bank Page -->
+    <div class="page" id="page-bank">
+      <div class="page-header">
+        <h2>📚 题库管理</h2>
+        <p>管理所有已生成的题目，可在线编辑或删除</p>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🔍 筛选题目</span>
+          <button class="btn btn-danger btn-sm" onclick="clearBank()">🗑️ 清空题库</button>
+        </div>
+        <div class="filter-bar" id="bankFilters">
+          <button class="filter-btn active" onclick="filterBank('all', this)">全部</button>
+          <button class="filter-btn" onclick="filterBank('single', this)">单选题</button>
+          <button class="filter-btn" onclick="filterBank('multi', this)">多选题</button>
+          <button class="filter-btn" onclick="filterBank('judge', this)">判断题</button>
+          <button class="filter-btn" onclick="filterBank('scenario', this)">情境题</button>
+          <button class="filter-btn" onclick="filterBank('qa', this)">问答题</button>
+          <button class="filter-btn" onclick="filterBank('L1', this)">L1 基础</button>
+          <button class="filter-btn" onclick="filterBank('L2', this)">L2 进阶</button>
+          <button class="filter-btn" onclick="filterBank('L3', this)">L3 挑战</button>
+        </div>
+        <div class="question-list" id="bankList">
+          <div style="text-align:center;padding:40px;color:var(--gray-400)">
+            <div style="font-size:48px;margin-bottom:12px">📭</div>
+            <p>题库暂无题目，请先完成AI出题并加入题库</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compose Page -->
+    <div class="page" id="page-compose">
+      <div class="page-header">
+        <h2>📝 组卷中心</h2>
+        <p>从题库中选择题目，组合成一套完整的试卷</p>
+      </div>
+      <div class="compose-layout">
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📋 题目选择</span>
+            </div>
+            <div class="filter-bar">
+              <button class="filter-btn active" onclick="filterCompose('all', this)">全部</button>
+              <button class="filter-btn" onclick="filterCompose('single', this)">单选</button>
+              <button class="filter-btn" onclick="filterCompose('multi', this)">多选</button>
+              <button class="filter-btn" onclick="filterCompose('judge', this)">判断</button>
+              <button class="filter-btn" onclick="filterCompose('scenario', this)">情境</button>
+              <button class="filter-btn" onclick="filterCompose('qa', this)">问答</button>
+            </div>
+            <div class="question-list" id="composeList">
+              <div style="text-align:center;padding:40px;color:var(--gray-400)">
+                <div style="font-size:48px;margin-bottom:12px">📭</div>
+                <p>请先在题库中添加题目</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="compose-sidebar">
+          <div class="exam-info-card">
+            <h3>📊 试卷信息</h3>
+            <div class="exam-stat"><span>已选题目</span><span id="composeStat-total">0 题</span></div>
+            <div class="exam-stat"><span>单选题</span><span id="composeStat-single">0</span></div>
+            <div class="exam-stat"><span>多选题</span><span id="composeStat-multi">0</span></div>
+            <div class="exam-stat"><span>判断题</span><span id="composeStat-judge">0</span></div>
+            <div class="exam-stat"><span>情境多选题</span><span id="composeStat-scenario">0</span></div>
+            <div class="exam-stat"><span>问答题</span><span id="composeStat-qa">0</span></div>
+            <div class="exam-stat"><span>L1基础题</span><span id="composeStat-l1">0</span></div>
+            <div class="exam-stat"><span>L2进阶题</span><span id="composeStat-l2">0</span></div>
+            <div class="exam-stat"><span>L3挑战题</span><span id="composeStat-l3">0</span></div>
+          </div>
+          <div style="margin-top:16px">
+            <div class="form-group" style="margin-bottom:12px">
+              <label class="form-label">试卷标题</label>
+              <input type="text" class="form-input" id="examTitle" placeholder="请输入试卷标题">
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label class="form-label">考试说明</label>
+              <textarea class="form-textarea" id="examDesc" placeholder="考试说明（可选）" style="min-height:60px"></textarea>
+            </div>
+            <button class="btn btn-success" style="width:100%" onclick="goToExport()">📤 确认组卷并导出 →</button>
+            <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="autoCompose()">🎲 一键智能组卷</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Page -->
+    <div class="page" id="page-export">
+      <div class="page-header">
+        <h2>📤 导出试卷</h2>
+        <p>预览并导出最终试卷文档</p>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+        <button class="btn btn-primary btn-lg" onclick="exportDocx()">⬇️ 导出 Word 文档（.docx）</button>
+        <button class="btn btn-outline" onclick="navigate('compose')">← 返回修改组卷</button>
+      </div>
+      <div class="alert alert-info">
+        💡 导出格式符合 Word 导入规范：题型标签使用【单选题】【多选题】【判断题】【情境多选题】，含正确答案、难易度、考核点、试题解析
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">👁️ 试卷预览</span>
+        </div>
+        <div id="exportPreview">
+          <div style="text-align:center;padding:40px;color:var(--gray-400)">
+            <div style="font-size:48px;margin-bottom:12px">📄</div>
+            <p>请先完成组卷操作</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Page -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <h2>⚙️ AI配置</h2>
+        <p>配置AI接口以启用智能出题功能</p>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🔑 API 配置</span>
+        </div>
+        <div class="alert alert-warning">
+          ⚠️ 请填写您的 OpenAI 兼容 API 配置（支持 OpenAI、通义千问、文心一言、DeepSeek 等兼容接口）
+        </div>
+        <div class="config-grid">
+          <div class="form-group">
+            <label class="form-label">API Base URL</label>
+            <input type="text" class="form-input" id="apiBaseUrl" placeholder="https://api.openai.com/v1" value="https://api.openai.com/v1">
+          </div>
+          <div class="form-group">
+            <label class="form-label">模型名称</label>
+            <input type="text" class="form-input" id="apiModel" placeholder="gpt-4o / qwen-turbo / deepseek-chat" value="gpt-4o">
+          </div>
+          <div class="form-group full">
+            <label class="form-label">API Key</label>
+            <input type="password" class="form-input" id="apiKey" placeholder="sk-...">
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-top:16px">
+          <button class="btn btn-primary" onclick="saveSettings()">💾 保存配置</button>
+          <button class="btn btn-outline" onclick="testApi()">🧪 测试连接</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">🎯 快捷配置</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+          <div class="card" style="padding:16px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:none" onclick="setPreset('openai')">
+            <div style="font-size:24px;margin-bottom:8px">🟢</div>
+            <div style="font-weight:600;font-size:14px">OpenAI</div>
+            <div style="font-size:12px;color:var(--gray-500)">GPT-4o / GPT-3.5</div>
+          </div>
+          <div class="card" style="padding:16px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:none" onclick="setPreset('deepseek')">
+            <div style="font-size:24px;margin-bottom:8px">🔵</div>
+            <div style="font-weight:600;font-size:14px">DeepSeek</div>
+            <div style="font-size:12px;color:var(--gray-500)">deepseek-chat</div>
+          </div>
+          <div class="card" style="padding:16px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:none" onclick="setPreset('qwen')">
+            <div style="font-size:24px;margin-bottom:8px">🟠</div>
+            <div style="font-weight:600;font-size:14px">通义千问</div>
+            <div style="font-size:12px;color:var(--gray-500)">qwen-turbo</div>
+          </div>
+          <div class="card" style="padding:16px;cursor:pointer;border:1px solid var(--gray-200);box-shadow:none" onclick="setPreset('demo')">
+            <div style="font-size:24px;margin-bottom:8px">🎮</div>
+            <div style="font-weight:600;font-size:14px">演示模式</div>
+            <div style="font-size:12px;color:var(--gray-500)">无需API Key</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 出题规范配置卡片 -->
+      <div class="card" id="standardsConfigCard">
+        <div class="card-header">
+          <span class="card-title">📐 出题规范配置</span>
+          <button class="btn btn-outline btn-sm" onclick="resetStandards()">↺ 恢复默认</button>
+        </div>
+        <p style="font-size:13px;color:var(--gray-500);margin-bottom:20px">自定义难度比例和题型比例，每次出题将按此规范生成（总计须为100%）</p>
+
+        <div class="standards-grid">
+          <!-- 难度比例 -->
+          <div>
+            <p class="section-title" style="margin-bottom:14px">🎯 难度比例（共100%）</p>
+            <div style="display:flex;flex-direction:column;gap:14px" id="difficultySliders">
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0"><span class="badge badge-l1">L1 基础层</span></label>
+                  <span id="l1Val" style="font-size:14px;font-weight:700;color:#065F46;min-width:44px;text-align:right">60%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="60" id="l1Slider" class="std-slider"
+                  oninput="onDiffSlider('l1')" style="width:100%">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0"><span class="badge badge-l2">L2 进阶层</span></label>
+                  <span id="l2Val" style="font-size:14px;font-weight:700;color:#92400E;min-width:44px;text-align:right">30%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="30" id="l2Slider" class="std-slider"
+                  oninput="onDiffSlider('l2')" style="width:100%">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0"><span class="badge badge-l3">L3 挑战层</span></label>
+                  <span id="l3Val" style="font-size:14px;font-weight:700;color:#991B1B;min-width:44px;text-align:right">10%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="10" id="l3Slider" class="std-slider"
+                  oninput="onDiffSlider('l3')" style="width:100%">
+              </div>
+
+              <div id="diffWarning" style="display:none;color:var(--danger);font-size:13px;font-weight:500">
+                ⚠️ 三项之和须等于100%，当前合计：<span id="diffTotal">100</span>%
+              </div>
+            </div>
+          </div>
+
+          <!-- 题型比例 -->
+          <div>
+            <p class="section-title" style="margin-bottom:14px">📝 题型比例（共100%）</p>
+            <div style="display:flex;flex-direction:column;gap:14px" id="typeSliders">
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0">单选题</label>
+                  <span id="tSingleVal" style="font-size:14px;font-weight:700;color:var(--primary);min-width:44px;text-align:right">40%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="40" id="tSingleSlider" class="std-slider"
+                  oninput="onTypeSlider('single')" style="width:100%">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0">多选题</label>
+                  <span id="tMultiVal" style="font-size:14px;font-weight:700;color:#92400E;min-width:44px;text-align:right">30%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="30" id="tMultiSlider" class="std-slider"
+                  oninput="onTypeSlider('multi')" style="width:100%">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0">判断题</label>
+                  <span id="tJudgeVal" style="font-size:14px;font-weight:700;color:#065F46;min-width:44px;text-align:right">20%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="20" id="tJudgeSlider" class="std-slider"
+                  oninput="onTypeSlider('judge')" style="width:100%">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0">情境多选题</label>
+                  <span id="tScenarioVal" style="font-size:14px;font-weight:700;color:#1E40AF;min-width:44px;text-align:right">10%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="10" id="tScenarioSlider" class="std-slider"
+                  oninput="onTypeSlider('scenario')" style="width:100%">
+              </div>
+
+              <div class="form-group">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                  <label class="form-label" style="margin:0">问答题</label>
+                  <span id="tQAVal" style="font-size:14px;font-weight:700;color:#6B21A8;min-width:44px;text-align:right">10%</span>
+                </div>
+                <input type="range" min="0" max="100" step="5" value="10" id="tQASlider" class="std-slider"
+                  oninput="onTypeSlider('qa')" style="width:100%">
+              </div>
+
+              <div id="typeWarning" style="display:none;color:var(--danger);font-size:13px;font-weight:500">
+                ⚠️ 五项之和须等于100%，当前合计：<span id="typeTotal">100</span>%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;gap:12px">
+          <button class="btn btn-primary" onclick="saveStandards()">💾 保存规范配置</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <h3 id="loadingTitle">AI 正在出题中...</h3>
+    <p id="loadingDesc">请稍候，正在分析课程内容</p>
+    <div class="loading-steps" id="loadingSteps"></div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>✏️ 编辑题目</h3>
+    <div id="editModalContent"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="closeEditModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveEdit()">💾 保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- Diagnostics Modal -->
+<div class="modal-overlay" id="diagModal">
+  <div class="modal" style="max-width:700px">
+    <h3>🔍 内容分区诊断</h3>
+    <div id="diagContent" style="font-size:13px;line-height:1.8"></div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-outline" onclick="document.getElementById('diagModal').classList.remove('show')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ========================
+// State Management
+// ========================
+let state = {
+  courseContent: '',
+  generatedQuestions: [],
+  questionBank: [],
+  selectedForExam: new Set(),
+  currentFilter: 'all',
+  editingQuestion: null,
+  settings: {
+    apiBaseUrl: localStorage.getItem('apiBaseUrl') || 'https://api.openai.com/v1',
+    apiKey: localStorage.getItem('apiKey') || '',
+    apiModel: localStorage.getItem('apiModel') || 'gpt-4o',
+    isDemoMode: localStorage.getItem('isDemoMode') === 'true',
+    focusDirection: localStorage.getItem('focusDirection') || '儿童表现特征与教学策略',
+    // 出题规范（难度比例，整数百分比，三项和=100）
+    diffL1: parseInt(localStorage.getItem('diffL1') || '60'),
+    diffL2: parseInt(localStorage.getItem('diffL2') || '30'),
+    diffL3: parseInt(localStorage.getItem('diffL3') || '10'),
+    // 出题规范（题型比例，整数百分比，四项和=100）
+    typeSingle:   parseInt(localStorage.getItem('typeSingle')   || '40'),
+    typeMulti:    parseInt(localStorage.getItem('typeMulti')    || '20'),
+    typeJudge:    parseInt(localStorage.getItem('typeJudge')    || '20'),
+    typeScenario: parseInt(localStorage.getItem('typeScenario') || '10'),
+    typeQA:       parseInt(localStorage.getItem('typeQA')       || '10')
+  }
+};
+
+// Load bank from localStorage
+try {
+  const saved = localStorage.getItem('questionBank');
+  if (saved) state.questionBank = JSON.parse(saved);
+} catch(e) {}
+
+// ========================
+// Navigation
+// ========================
+function navigate(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('nav-' + page).classList.add('active');
+
+  if (page === 'generate') {
+    updateGeneratePage();
+  } else if (page === 'upload') {
+    renderStandardsPreview();
+  } else if (page === 'bank') {
+    renderBank();
+  } else if (page === 'compose') {
+    renderCompose();
+  } else if (page === 'export') {
+    renderExport();
+  } else if (page === 'settings') {
+    loadSettings();
+  }
+}
+
+function updateGeneratePage() {
+  const content = document.getElementById('courseContent').value;
+  state.courseContent = content;
+  const preview = document.getElementById('contentPreview');
+  if (content.trim()) {
+    preview.textContent = content.trim().substring(0, 100) + (content.length > 100 ? '...' : '');
+    // 预检分区
+    const knowledge = extractKnowledge(content, document.getElementById('moduleName').value || '课程');
+    const modCount = knowledge.modules.length;
+    const modNames = knowledge.modules.map(m => m.name).join('、');
+    const modSizes = knowledge.modules.map(m => m.content.length + '字').join(' / ');
+    const modEl = document.getElementById('moduleInfo');
+    if (modEl) {
+      if (modCount >= 2) {
+        modEl.innerHTML = '✅ 内容已分为 <b>' + modCount + '</b> 部分：' + modNames + '<br><span style="font-size:11px;color:#9CA3AF">各部分长度：' + modSizes + '，题目将均等分配</span>';
+        modEl.style.color = 'var(--success)';
+      } else {
+        modEl.innerHTML = '⚠️ 内容较短，仅分为 <b>1</b> 部分<br><span style="font-size:11px;color:#F59E0B">内容少于60字时无法分区</span>';
+        modEl.style.color = 'var(--warning)';
+      }
+    }
+    // 缓存诊断信息
+    window._lastDiagInfo = {
+      content,
+      knowledge,
+      detectedNames: knowledge.modules.map(m => m.name),
+      contentPreview: content.trim().substring(0, 1500),
+      partSizes: knowledge.modules.map(m => m.content.length)
+    };
+  } else {
+    preview.textContent = '（未输入课程内容）';
+    const modEl = document.getElementById('moduleInfo');
+    if (modEl) modEl.innerHTML = '';
+    window._lastDiagInfo = null;
+  }
+  const modelEl = document.getElementById('modelDisplay');
+  if (state.settings.isDemoMode) {
+    modelEl.textContent = '🎮 演示模式（无需API）';
+    modelEl.style.color = 'var(--warning)';
+  } else if (state.settings.apiKey) {
+    modelEl.textContent = '🟢 已配置 - ' + state.settings.apiModel;
+    modelEl.style.color = 'var(--success)';
+  } else {
+    modelEl.innerHTML = '🔴 未配置 - <a href="#" onclick="navigate(\'settings\')" style="color:var(--primary)">点击配置</a>';
+  }
+}
+
+// 诊断弹窗（显示4分区详情）
+function showDiagModal() {
+  const info = window._lastDiagInfo;
+  if (!info) {
+    document.getElementById('diagContent').innerHTML = '<p style="color:var(--gray-500)">请先在"上传课程内容"页面输入或上传内容，再回到此页面查看分区详情。</p>';
+    document.getElementById('diagModal').classList.add('show');
+    return;
+  }
+  const k = info.knowledge;
+  const modCount = k.modules.length;
+
+  let html = '<div style="margin-bottom:16px">';
+  html += '<p><b>📊 分区结果：</b><span style="color:' + (modCount >= 2 ? 'var(--success)' : 'var(--warning)') + '">共 ' + modCount + ' 部分</span></p>';
+  html += '<p><b>🔤 总字符数：</b>' + info.content.length + '</p>';
+  html += '<p><b>📐 分区策略：</b>按字符数均分为4份，在段落边界（空行）处微调断点，确保不切断段落</p>';
+  html += '</div>';
+
+  html += '<hr style="border-color:var(--gray-200);margin:16px 0">';
+  html += '<p style="font-weight:600;margin-bottom:8px">📋 各部分详情：</p>';
+  html += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+  html += '<tr style="background:var(--gray-100)"><th style="padding:6px 8px;text-align:left">部分</th><th style="padding:6px 8px;text-align:right">字符数</th><th style="padding:6px 8px;text-align:left">内容预览</th></tr>';
+  for (let i = 0; i < k.modules.length; i++) {
+    const m = k.modules[i];
+    const preview = m.content.replace(/\n/g, ' ').substring(0, 60) + '…';
+    html += '<tr><td style="padding:6px 8px">' + m.name + '</td><td style="padding:6px 8px;text-align:right">' + m.content.length + '</td><td style="padding:6px 8px;font-size:11px;color:var(--gray-500)">' + escapeHtml(preview) + '</td></tr>';
+  }
+  html += '</table>';
+
+  html += '<hr style="border-color:var(--gray-200);margin:16px 0">';
+  html += '<p style="font-weight:600;margin-bottom:8px">📝 原文前 1500 字符：</p>';
+  html += '<pre style="background:var(--gray-50);padding:12px;border-radius:8px;font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:300px;overflow-y:auto;line-height:1.6">' + escapeHtml(info.contentPreview) + '</pre>';
+
+  html += '<p style="font-size:12px;color:var(--gray-500);margin-top:12px">💡 出题时，题目总数将按4部分均分。每部分的题目覆盖该段内容的核心知识点。</p>';
+
+  document.getElementById('diagContent').innerHTML = html;
+  document.getElementById('diagModal').classList.add('show');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ========================
+// File Upload
+// ========================
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadArea').classList.add('dragover');
+}
+function handleDragLeave(e) {
+  document.getElementById('uploadArea').classList.remove('dragover');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadArea').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+function handleFileUpload(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+// ── PDF 解析（pdf.js）──────────────────────────────────────────────
+async function extractPdf(file) {
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  if (!pdfjsLib) throw new Error('PDF.js 未加载，请检查网络后刷新页面');
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    const text = tc.items.map(it => it.str).join(' ').trim();
+    if (text) pages.push(`--- 第${i}页 ---\n${text}`);
+  }
+  return pages.join('\n\n');
+}
+
+// ── PPTX 解析（JSZip + XML）────────────────────────────────────────
+async function extractPptx(file) {
+  if (!window.JSZip) throw new Error('JSZip 未加载，请检查网络后刷新页面');
+  const arrayBuffer = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(arrayBuffer);
+
+  // 找所有幻灯片文件，按序号排列
+  const slideFiles = Object.keys(zip.files)
+    .filter(n => /^ppt\/slides\/slide(\d+)\.xml$/i.test(n))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/slide(\d+)/i)[1]);
+      const nb = parseInt(b.match(/slide(\d+)/i)[1]);
+      return na - nb;
+    });
+
+  const slides = [];
+  for (let idx = 0; idx < slideFiles.length; idx++) {
+    const xml = await zip.files[slideFiles[idx]].async('text');
+    // 提取所有 <a:t> 文字节点
+    const matches = xml.match(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g) || [];
+    const text = matches
+      .map(m => m.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean)
+      .join('\n');
+    if (text) slides.push(`--- 第${idx + 1}页 ---\n${text}`);
+  }
+  return slides.join('\n\n');
+}
+
+// ── DOCX 解析（mammoth.js）─────────────────────────────────────────
+async function extractDocx(file) {
+  if (!window.mammoth) throw new Error('mammoth.js 未加载，请检查网络后刷新页面');
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await mammoth.extractRawText({ arrayBuffer });
+  return result.value || '';
+}
+
+// ── 主入口 ─────────────────────────────────────────────────────────
+async function processFile(file) {
+  const icons = { 'txt': '📄', 'docx': '📘', 'pdf': '📕', 'md': '📝', 'pptx': '📊', 'doc': '📘', 'html': '🌐', 'htm': '🌐' };
+  const ext = file.name.split('.').pop().toLowerCase();
+  
+  document.getElementById('fileIcon').textContent = icons[ext] || '📄';
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = '大小：' + (file.size / 1024).toFixed(1) + ' KB';
+  document.getElementById('filePreview').style.display = 'flex';
+
+  showToast('📂 正在解析文件...', 'info');
+
+  try {
+    let content = '';
+
+    if (ext === 'txt' || ext === 'md' || ext === 'html' || ext === 'htm') {
+      content = await file.text();
+      // HTML文件：去除标签只保留文本
+      if (ext === 'html' || ext === 'htm') {
+        const div = document.createElement('div');
+        div.innerHTML = content;
+        content = div.textContent || div.innerText || '';
+      }
+    } else if (ext === 'pdf') {
+      content = await extractPdf(file);
+    } else if (ext === 'pptx') {
+      content = await extractPptx(file);
+    } else if (ext === 'docx' || ext === 'doc') {
+      content = await extractDocx(file);
+    } else {
+      throw new Error('不支持的文件格式：.' + ext + '（支持 PDF / PPTX / DOCX / TXT / HTML）');
+    }
+
+    if (content.trim()) {
+      document.getElementById('courseContent').value = content;
+      updateWordCount();
+      showToast('✅ 文件解析完成！共提取 ' + content.length + ' 字', 'success');
+    } else {
+      showToast('⚠️ 未能提取到文字内容，可能是纯图片型文件', 'warning');
+    }
+  } catch(e) {
+    showToast('⚠️ 文件解析失败：' + e.message + '，请尝试手动粘贴内容', 'warning');
+    console.error('File parse error:', e);
+  }
+}
+
+function clearFile() {
+  document.getElementById('filePreview').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+}
+
+function updateWordCount() {
+  const content = document.getElementById('courseContent').value;
+  document.getElementById('contentStats').textContent = '字数：' + content.length;
+}
+document.getElementById('courseContent').addEventListener('input', updateWordCount);
+
+// ========================
+// Demo Content
+// ========================
+function loadDemo() {
+  const demo = `课程主题：课堂观察与教学评估方法论
+
+一、课堂观察的定义与意义
+课堂观察是指观察者进入真实课堂教学环境，运用系统的方法收集教师行为、学生行为及师生互动等课堂信息，并基于此进行专业分析与评估的一种教学研究方法。
+
+课堂观察的意义：
+1. 帮助教师了解自身教学行为，发现改进空间
+2. 为教研团队提供真实课堂数据，支撑科学决策
+3. 促进教师专业发展，提升整体教学质量
+
+二、课堂观察的核心维度
+1. 教师行为维度：包括语言表达、提问技巧、板书规范、时间分配、情绪管理
+2. 学生行为维度：参与度、专注力、互动频率、作业质量
+3. 课堂管理维度：纪律维护、课堂节奏、突发情况处理
+4. 教学设计维度：目标清晰度、重难点突出度、方法多样性
+
+三、Kirkpatrick四层评估模型
+L1 反应层：学员对培训的即时满意度（问卷调查）
+L2 学习层：知识与技能的掌握情况（测试题/操作演示）
+L3 行为层：培训后实际工作行为的改变
+L4 结果层：培训对业务指标产生的最终影响
+
+四、教学评分标准
+4.1 基础要求（L1）：教师需具备清晰板书、标准语言表达、合理时间分配三项基本能力
+4.2 进阶要求（L2）：能够根据学生反应灵活调整教学策略，运用多元提问技巧激发思考
+4.3 挑战要求（L3）：能够在复杂课堂情境下独立应对突发情况，并保持高质量教学输出`;
+  
+  document.getElementById('courseContent').value = demo;
+  updateWordCount();
+  showToast('✅ 示例内容已加载', 'success');
+}
+
+// ========================
+// AI Generate
+// ========================
+async function startGenerate() {
+  const content = document.getElementById('courseContent').value.trim();
+  if (!content) {
+    showToast('⚠️ 请先输入或上传课程内容', 'warning');
+    navigate('upload');
+    return;
+  }
+
+  state.courseContent = content;
+  const moduleName = document.getElementById('moduleName').value || '第一模块';
+  const count = parseInt(document.getElementById('questionCount').value);
+  const focusDir = document.getElementById('focusDirection').value || '儿童表现特征与教学策略';
+  state.settings.focusDirection = focusDir;
+  localStorage.setItem('focusDirection', focusDir);
+
+  showLoading('🤖 AI 正在出题中...', '正在分析课程内容，按照规范生成题目', [
+    '📖 解析课程内容...',
+    '🧠 提取核心知识点...',
+    '✍️ 生成单选题（4题）...',
+    '✍️ 生成多选题（3题）...',
+    '✍️ 生成判断题（2题）...',
+    '✍️ 生成情境多选题（1题）...',
+    '🔍 校验题目质量...'
+  ]);
+
+  try {
+    let questions;
+    if (state.settings.isDemoMode || !state.settings.apiKey || state.settings.apiKey === 'demo-mode') {
+      await fakeDelay(3000);
+      questions = generateDemoQuestions(content, moduleName, count, focusDir);
+    } else {
+      questions = await callAI(content, moduleName, count, focusDir);
+    }
+
+    state.generatedQuestions = questions;
+    hideLoading();
+    renderGeneratedQuestions(questions);
+    document.getElementById('questionsResult').style.display = 'block';
+    updateBadges();
+    showToast('✅ 成功生成 ' + questions.length + ' 道题目！', 'success');
+
+  } catch(e) {
+    hideLoading();
+    showToast('❌ 出题失败：' + e.message, 'error');
+  }
+}
+
+async function callAI(content, moduleName, count, focusDirection) {
+  // 读取用户自定义的题型比例和难度比例
+  const s = state.settings;
+  const single   = Math.max(0, Math.round(count * s.typeSingle   / 100));
+  const multi    = Math.max(0, Math.round(count * s.typeMulti    / 100));
+  const judge    = Math.max(0, Math.round(count * s.typeJudge    / 100));
+  const scenario = Math.max(0, Math.round(count * s.typeScenario / 100));
+  const qa       = Math.max(0, count - single - multi - judge - scenario);
+  const l1n = Math.round(count * s.diffL1 / 100);
+  const l2n = Math.round(count * s.diffL2 / 100);
+  const l3n = count - l1n - l2n;
+
+  const prompt = `你是一位专业的教学测评专家，请根据以下课程内容，严格按照规范生成考试题目。
+
+课程内容已按顺序分为4个部分，请确保题目覆盖全部4个部分的内容，前后兼顾，不要集中在某一处。
+
+课程内容：
+${content.substring(0, 3000)}
+
+出题聚焦方向：${focusDirection}
+重要：所有题目的核心立意必须围绕「${focusDirection}」，侧重于儿童在该领域的实际表现、教学应对策略和发展规律，避免出"以下哪项属于XX模块"这样的内容归类题。
+
+出题规范：
+1. 总题数：${count}题（模块名：${moduleName}）- 请尽量均分到内容的4个部分
+2. 难度分配：L1基础层 ${l1n}题(≥90%答对率), L2进阶层 ${l2n}题(60-80%答对率), L3挑战层 ${l3n}题(30-50%答对率)
+3. 题型分配：单选题 ${single}题, 多选题 ${multi}题, 判断题 ${judge}题, 情境多选题 ${scenario}题, 问答题 ${qa}题
+4. 情境多选题要求：给出一个复杂但典型的教学或儿童发展情境，要求选出所有合适的做法/策略（多选）。情境和选项应对课程内容进行合理拓展和延伸，不能只是原文摘抄。
+5. 问答题要求：围绕课程内容出开放性简答题，要求用2-4句话阐述观点或解释原理。需提供参考答案要点（2-4个关键点）。
+
+请以严格的JSON格式返回，格式如下（只返回JSON，不要其他文字）：
+{
+  "questions": [
+    {
+      "type": "single|multi|judge|scenario|qa",
+      "level": "L1|L2|L3",
+      "content": "题目内容（情境多选题请给出详细的情境描述；问答题请给出清晰的开放性问题）",
+      "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
+      "answer": "A（单选填字母，多选填如AC，判断填正确/错误，问答题填参考答案要点）",
+      "keywords": "关键词1;关键词2（仅情境多选题需要）",
+      "point": "考核知识点",
+      "analysis": "试题解析",
+      "difficulty": "易|中|难"
+    }
+  ]
+}`;
+
+  const response = await fetch(state.settings.apiBaseUrl + '/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + state.settings.apiKey
+    },
+    body: JSON.stringify({
+      model: state.settings.apiModel,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      max_tokens: 4000
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error('API请求失败: ' + response.status + ' - ' + err.substring(0, 100));
+  }
+
+  const data = await response.json();
+  const text = data.choices[0].message.content;
+  
+  // Extract JSON
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI返回格式错误');
+  
+  const parsed = JSON.parse(jsonMatch[0]);
+  return parsed.questions.map((q, i) => ({ ...q, id: Date.now() + i, module: moduleName, inBank: false, selected: true }));
+}
+
+function generateDemoQuestions(content, moduleName, count, focusDirection) {
+  const knowledge = extractKnowledge(content, moduleName);
+  // 读取用户自定义的题型比例
+  const s = state.settings;
+  const sn  = Math.max(0, Math.round(count * s.typeSingle   / 100));
+  const mn  = Math.max(0, Math.round(count * s.typeMulti    / 100));
+  const jn  = Math.max(0, Math.round(count * s.typeJudge    / 100));
+  const scn = Math.max(0, Math.round(count * s.typeScenario / 100));
+  const qan = Math.max(0, count - sn - mn - jn - scn);
+  const typeCounts = { single: sn, multi: mn, judge: jn, scenario: scn, qa: qan };
+
+  // 读取用户自定义的难度比例
+  const l1 = Math.round(count * s.diffL1 / 100);
+  const l2 = Math.round(count * s.diffL2 / 100);
+  const levels = [];
+  for (let i = 0; i < l1; i++) levels.push('L1');
+  for (let i = 0; i < l2; i++) levels.push('L2');
+  for (let i = levels.length; i < count; i++) levels.push('L3');
+
+  const allQuestions = buildContentBasedQuestions(knowledge, moduleName, typeCounts, levels, focusDirection);
+  return allQuestions.slice(0, count);
+}
+
+// ───────── 内容分区：将全文按顺序均分为 N 部分 ─────────
+function extractKnowledge(content, moduleName) {
+  const PART_COUNT = 4; // 固定4部分
+
+  const result = {
+    title: moduleName,
+    modules: [],       // { name, content, keyFacts[], listItems[] }
+    globalFacts: [],   // 全局事实
+    ageGroups: [],
+    fullContent: content
+  };
+
+  // 1. 清洗
+  const clean = content.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const totalLen = clean.length;
+
+  if (totalLen < 60) {
+    // 内容太短，整篇作为一个部分
+    result.modules.push(buildModuleObj(moduleName, clean));
+  } else {
+    // 2. 按字符数均分为 PART_COUNT 份，在段落边界（\\n\\n）微调断点
+    const partSize = Math.floor(totalLen / PART_COUNT);
+    const cutPoints = [];
+    for (let p = 1; p < PART_COUNT; p++) {
+      let ideal = partSize * p;
+      // 在 ideal 附近 ±20% 范围内找最近的段落边界（\\n\\n）
+      const searchStart = Math.max(0, Math.floor(ideal * 0.8));
+      const searchEnd = Math.min(totalLen, Math.ceil(ideal * 1.2));
+      const searchZone = clean.substring(searchStart, searchEnd);
+      // 找 \\n\\n 位置
+      let best = searchZone.lastIndexOf('\n\n');
+      if (best < 0) {
+        // 退而求其次找单个换行
+        best = searchZone.lastIndexOf('\n');
+      }
+      if (best > 0) {
+        cutPoints.push(searchStart + best + 2);
+      } else {
+        // 连换行都找不到，直接用理想位置
+        cutPoints.push(ideal);
+      }
+    }
+    // 去重 + 排序
+    const uniqueCuts = [...new Set(cutPoints)].sort((a, b) => a - b).filter(cp => cp > 50 && cp < totalLen - 30);
+
+    // 3. 按断点切分
+    const parts = [];
+    let prev = 0;
+    for (const cp of uniqueCuts) {
+      const partContent = clean.substring(prev, cp).trim();
+      if (partContent.length > 20) parts.push(partContent);
+      prev = cp;
+    }
+    // 最后一部分
+    const lastPart = clean.substring(prev).trim();
+    if (lastPart.length > 20) parts.push(lastPart);
+
+    // 如果断点切出来不够4份（内容太少），补刀再切
+    if (parts.length < PART_COUNT) {
+      // 把最大的那份对半切
+      while (parts.length < PART_COUNT) {
+        let maxIdx = 0, maxLen = 0;
+        for (let i = 0; i < parts.length; i++) {
+          if (parts[i].length > maxLen) { maxLen = parts[i].length; maxIdx = i; }
+        }
+        if (maxLen < 100) break; // 别再切了
+        const big = parts[maxIdx];
+        const mid = Math.floor(big.length / 2);
+        // 找最近的换行断点
+        const nlPos = big.indexOf('\n', Math.floor(mid * 0.7));
+        const splitPt = (nlPos > 0 && nlPos < mid * 1.3) ? nlPos : mid;
+        parts.splice(maxIdx, 1, big.substring(0, splitPt).trim(), big.substring(splitPt).trim());
+      }
+    }
+
+    // 4. 构建模块对象，编号命名
+    for (let i = 0; i < parts.length && i < PART_COUNT; i++) {
+      const name = '第' + (i + 1) + '部分';
+      result.modules.push(buildModuleObj(name, parts[i]));
+    }
+
+    console.log('[extractKnowledge] 内容均分为 ' + result.modules.length + ' 部分，各长度:', result.modules.map(m => m.content.length).join(', '));
+    window._lastDetectedModules = result.modules.map(m => m.name);
+  }
+
+  // 5. 提取全局事实
+  const allSentences = clean.split(/[。！？；;]/).map(s => s.trim()).filter(s => s.length >= 10 && s.length < 200);
+  for (const s of allSentences) {
+    if (/课程|培养|发展|目标|理念|核心|体系|框架/.test(s) && !s.includes('如何') && !s.includes('怎样')) {
+      result.globalFacts.push(s);
+    }
+  }
+  result.globalFacts = [...new Set(result.globalFacts)].slice(0, 10);
+
+  // 6. 提取年龄段
+  const ageMatch = clean.match(/(\d+[-~至到]\d+)\s*(?:岁|周岁|年级)/);
+  if (ageMatch) result.ageGroups.push(ageMatch[0]);
+  const singleAgeMatch = clean.match(/(\d+\s*岁(?:以下|以上)?)/);
+  if (singleAgeMatch) result.ageGroups.push(singleAgeMatch[0]);
+
+  // 7. 全局事实兜底
+  if (result.globalFacts.length === 0) {
+    result.globalFacts.push(moduleName + '需要系统培养，注重儿童发展规律');
+  }
+
+  return result;
+}
+
+// ───────── 辅助：从一段文本构建模块对象 ─────────
+function buildModuleObj(name, modContent) {
+  const obj = { name, content: modContent, keyFacts: [], listItems: [] };
+
+  // 提取关键事实句
+  const sentences = modContent.split(/[。！？；;]/).map(s => s.trim()).filter(s => s.length >= 8 && s.length < 200);
+  for (const s of sentences) {
+    if (/是|指|即|包括|包含|涵盖|特征|表现|能力|发展|培养|阶段|特点|规律|方法|策略|训练|核心/.test(s) && !s.includes('如何') && !s.includes('怎样')) {
+      if (s.length < 150) obj.keyFacts.push(s);
+    }
+  }
+  obj.keyFacts = [...new Set(obj.keyFacts)].slice(0, 12);
+
+  // 提取列表项（数字编号 / 符号编号 / 圆圈数字）
+  const items = modContent.match(/(?:^|\n)\s*(?:[•·\-\*]|\d+[.\)）\、]|[\u2460-\u2473])\s*([\u4e00-\u9fa5]{2,35})/g);
+  if (items) {
+    obj.listItems = items.map(it => it.replace(/^\s*(?:[•·\-\*]|\d+[.\)）\、]|[\u2460-\u2473])\s*/, '').trim()).slice(0, 8);
+  }
+
+  // 如果列表项不足，尝试从内容中提取关键短语
+  if (obj.listItems.length < 2) {
+    const phrases = modContent.match(/[\u4e00-\u9fa5]{2,10}(?:能力|思维|认知|发展|训练|方法|策略|特征|概念|阶段|模式|规律|技巧|素养|意识|习惯|基础|启蒙)/g);
+    if (phrases) {
+      obj.listItems = [...new Set([...obj.listItems, ...phrases])].slice(0, 8);
+    }
+  }
+
+  // 最后兜底：至少给几个占位列表项
+  if (obj.listItems.length < 2) {
+    obj.listItems = ['核心概念理解', '基本方法掌握', '日常应用能力', '发展规律认知'];
+  }
+
+  return obj;
+}
+
+// ───────── 按模块轮询分配题型，确保覆盖均匀 ─────────
+function buildContentBasedQuestions(knowledge, moduleName, typeCounts, levels, focusDirection) {
+  const { modules, globalFacts, ageGroups } = knowledge;
+  let qId = Date.now();
+  const diffAt = lvl => lvl === 'L1' ? '易' : lvl === 'L2' ? '中' : '难';
+
+  const totalNeeded = (typeCounts.single || 0) + (typeCounts.multi || 0) + (typeCounts.judge || 0) + (typeCounts.scenario || 0) + (typeCounts.qa || 0);
+
+  // 构建任务列表：(模块索引, 题型, 难度级索引)，通过模块轮询确保均匀
+  const taskList = [];
+  const modCount = Math.max(1, modules.length);
+  let levelIdx = 0;
+
+  const types = ['single', 'multi', 'judge', 'scenario', 'qa'];
+  for (const type of types) {
+    const count = typeCounts[type] || 0;
+    for (let i = 0; i < count; i++) {
+      taskList.push({ modIdx: i % modCount, type, levelIdx });
+      levelIdx++;
+    }
+  }
+
+  const allQuestions = [];
+  const tplCounters = {}; // 每个模块每种题型的模板轮次计数
+
+  for (const task of taskList) {
+    const mod = modules[task.modIdx];
+    const key = task.modIdx + '|' + task.type;
+    if (!tplCounters[key]) tplCounters[key] = 0;
+    const tplRound = tplCounters[key]++;
+
+    const q = genOneQuestion(mod, moduleName, globalFacts, ageGroups, task.type, tplRound, qId++, levels[task.levelIdx] || 'L1', diffAt, focusDirection);
+    if (q) allQuestions.push(q);
+  }
+
+  // 如果生成数量不足，用额外题目补齐
+  if (allQuestions.length < totalNeeded) {
+    const needed = totalNeeded - allQuestions.length;
+    for (let i = 0; i < needed; i++) {
+      const mod = modules[i % modCount];
+      const key = i % modCount + '|single';
+      if (!tplCounters[key]) tplCounters[key] = 0;
+      const tplRound = tplCounters[key]++;
+      const q = genOneQuestion(mod, moduleName, globalFacts, ageGroups, 'single', tplRound, qId++, levels[allQuestions.length] || 'L1', diffAt, focusDirection);
+      if (q) allQuestions.push(q);
+    }
+  }
+
+  // 打乱顺序，让不同模块的题目交错
+  for (let i = allQuestions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allQuestions[i], allQuestions[j]] = [allQuestions[j], allQuestions[i]];
+  }
+
+  console.log('[buildContentBasedQuestions] 共 ' + allQuestions.length + ' 题, 模块分布:', 
+    allQuestions.reduce((acc, q) => { acc[q.module] = (acc[q.module] || 0) + 1; return acc; }, {}));
+
+  return allQuestions.slice(0, totalNeeded);
+}
+
+// ───────── 为指定模块生成单道指定类型的题目（v7：聚焦方向驱动） ─────────
+function genOneQuestion(mod, courseName, globalFacts, ageGroups, type, tplRound, qId, level, diffAtFn, focusDirection) {
+  const modName = mod.name;
+  const facts = mod.keyFacts;
+  const listItems = mod.listItems;
+  const focus = focusDirection || '儿童表现特征与教学策略';
+
+  // 判断聚焦方向的语义类别，决定模板偏向
+  const hasPerform = /表现|特征|行为|观察|能力|发展/.test(focus);
+  const hasStrategy = /策略|方法|教学|训练|指导|干预/.test(focus);
+  const hasRule = /规律|阶段|发展|过程/.test(focus);
+  const hasMistake = /误区|错误|误解|混淆/.test(focus);
+  const hasParent = /家长|家庭|沟通|亲子/.test(focus);
+
+  // 动态选择干扰项（根据聚焦方向）
+  function distractorPool() {
+    if (hasPerform) return ['体能素质训练', '音乐节奏模仿', '绘画色彩认知', '英语口语表达', '手工制作能力'];
+    if (hasStrategy) return ['统一教学进度', '纯机械练习', '单一讲授法', '完全自由放任', '脱离情境教学'];
+    if (hasMistake) return ['先天决定论', '机械记忆法', '填鸭式教学', '一刀切要求', '完全自然成长'];
+    return ['体能素质训练', '音乐节奏模仿', '生活自理习惯', '绘画色彩认知', '英语口语表达'];
+  }
+
+  // ===== 单选题模板 =====
+  if (type === 'single') {
+    const templates = [
+      // 0. 表现/特征判断
+      { mk: () => {
+        if (hasPerform || hasRule) return {
+          content: `在「${modName}」的教学活动中，观察到以下哪种儿童表现最能体现该能力的发展？`,
+          options: [
+            `A. 儿童能够按照教师示范机械地复制操作方法`,
+            `B. 儿童在操作中能够灵活调整策略，并用自己的语言描述思考过程`,
+            `C. 儿童安静地听完整个活动，没有提问也没有动手`,
+            `D. 儿童反复做同一个简单操作，不愿尝试新方法`
+          ],
+          answer: 'B', point: `${modName}-典型表现识别`,
+          analysis: `在「${modName}」中，灵活调整策略并能用语言描述思考过程，说明儿童真正理解了操作背后的数学意义，是能力发展的核心表现。`
+        };
+        if (hasStrategy) return {
+          content: `关于「${modName}」的有效教学，以下策略最合理的是：`,
+          options: [
+            `A. 统一进度，要求所有儿童在同一时间完成同样的任务`,
+            `B. 提供分层操作材料，允许儿童按自己的节奏探索，教师根据观察灵活介入引导`,
+            `C. 教师详细讲解每一步操作方法，儿童严格按步骤执行`,
+            `D. 让儿童自由玩耍，教师不做任何干预和引导`
+          ],
+          answer: 'B', point: `${modName}-教学策略选择`,
+          analysis: `有效教学需要在观察儿童表现的基础上，提供差异化的支持——即"观察→判断→引导"循环。选项B体现了这一核心理念。`
+        };
+        return {
+          content: `关于「${modName}」的教学，以下说法最准确的是：`,
+          options: [
+            `A. ${modName}是儿童与生俱来的本能，无需后天教育引导`,
+            `B. ${modName}需要在教学中通过观察儿童表现、针对性引导逐步发展`,
+            `C. ${modName}仅在课堂场景中体现，与日常生活无关`,
+            `D. ${modName}主要依赖反复练习和记忆，不需要理解`
+          ],
+          answer: 'B', point: `${modName}-核心理念`,
+          analysis: `${modName}的发展需要教师在关注儿童表现的基础上进行有目的的教学引导。`
+        };
+      }},
+      // 1. 教学行为判断
+      { mk: () => {
+        if (hasStrategy) return {
+          content: `在「${modName}」课堂中，教师观察到小明总是用同一种方法解题，不愿尝试其他思路。以下应对策略最恰当的是：`,
+          options: [
+            `A. 直接告诉小明他错了，要求他改用教师指定的方法`,
+            `B. 通过提问引导小明思考："还有其他方法吗？试试看会发生什么？"`,
+            `C. 忽略小明的表现，让他按自己的方式继续`,
+            `D. 要求小明反复抄写标准解法，直到记住为止`
+          ],
+          answer: 'B', point: `${modName}-教师引导策略`,
+          analysis: `当儿童表现单一解法时，教师应通过开放式提问激发儿童的多角度思考，而非强制统一或放任不管。这是聚焦儿童表现、灵活调整策略的典型教学智慧。`
+        };
+        if (hasMistake) return {
+          content: `关于「${modName}」的教学，以下哪种观点属于常见误区？`,
+          options: [
+            `A. ${modName}的发展需要结合具体操作和生活情境`,
+            `B. 儿童之间存在个体差异，需要差异化的教学支持`,
+            `C. ${modName}可以通过反复刷题来快速提升，不需要关注儿童的理解过程`,
+            `D. 教师在儿童操作过程中应及时观察并适时引导`
+          ],
+          answer: 'C', point: `${modName}-常见误区识别`,
+          analysis: `选项C属于\"刷题万能论\"误区。${modName}的培养重在理解与迁移，而非机械刷题。教师应关注儿童的思维过程，而非仅关注答案对错。`
+        };
+        return {
+          content: `在「${modName}」课堂中，以下哪种教师行为最能有效促进儿童发展？`,
+          options: [
+            `A. 教师站在讲台上系统讲解，儿童安静听讲`,
+            `B. 教师创设情境，观察儿童操作过程，在关键节点提出启发性问题`,
+            `C. 教师出示标准答案，要求儿童对照检查`,
+            `D. 教师布置大量书面练习题，要求儿童课后完成`
+          ],
+          answer: 'B', point: `${modName}-有效教学行为`,
+          analysis: `选项B体现了\"以儿童表现为中心\"的教学理念——教师是观察者和引导者，而非灌输者。`
+        };
+      }},
+      // 2. 发展规律
+      { mk: () => {
+        if (hasRule || hasPerform) return {
+          content: `${ageGroups[0] || '该年龄段'}儿童在「${modName}」方面的发展规律，以下说法正确的是：`,
+          options: [
+            `A. 该阶段儿童已具备完整的抽象逻辑推理能力`,
+            `B. 该阶段以具体形象思维为主，${modName}的发展需要借助实物操作`,
+            `C. 该阶段儿童的${modName}已发展完毕，不需要继续培养`,
+            `D. 该阶段完全不具备${modName}发展的基础，启蒙没有意义`
+          ],
+          answer: 'B', point: `${modName}-发展规律`,
+          analysis: `${ageGroups[0] || '该年龄段'}儿童的思维特点是以具体形象思维为主，教学应充分借助实物、教具等直观手段。`
+        };
+        return {
+          content: `下列关于「${modName}」培养时机说法正确的是：`,
+          options: [
+            `A. 必须等到儿童达到特定年龄再开始培养`,
+            `B. 在日常生活中随时可以渗透，关键是符合儿童当前发展水平`,
+            `C. 越早开始越好，不管儿童是否能理解`,
+            `D. 培养时机完全由教材决定，教师无需判断`
+          ],
+          answer: 'B', point: `${modName}-培养时机`,
+          analysis: `${modName}的培养应融入日常生活，教师的专业判断在于根据儿童当前的表现水平选择合适的介入时机。`
+        };
+      }},
+      // 3. 家长沟通（特别模板）
+      { mk: () => {
+        if (hasParent) return {
+          content: `家长问："我孩子在家里玩积木时只是随便搭，看起来没什么数学思维。"作为教师，最恰当的回应是：`,
+          options: [
+            `A. "那你要多让他做数学题，玩积木没用"`,
+            `B. "随便搭的过程中其实蕴含了空间感知和数量关系的探索，您可以尝试和他一起搭，边搭边用数学语言描述"`,
+            `C. "正常，很多孩子都这样，不用担心"`,
+            `D. "这说明孩子数学天赋一般，需要更系统的训练"`
+          ],
+          answer: 'B', point: `${modName}-家长沟通`,
+          analysis: `选项B既肯定了儿童的自由探索行为，又为家长提供了具体可操作的引导策略，体现了专业的家校沟通能力。`
+        };
+        return {
+          content: `以下哪种做法最有利于促进「${modName}」在家庭中的发展？`,
+          options: [
+            `A. 要求家长每天带孩子做20道书面数学题`,
+            `B. 引导家长在日常生活中抓住自然情境（如购物、分餐具）进行对话式数学启蒙`,
+            `C. 建议家长把辅导工作交给app或培训班`,
+            `D. 要求家长严格按照学校的进度在家同步教学`
+          ],
+          answer: 'B', point: `${modName}-家庭渗透`,
+          analysis: `日常生活中自然渗透是最有效的家庭数学启蒙方式，既不增加家长负担，又能让儿童在真实情境中发展数学思维。`
+        };
+      }}
+    ];
+    const available = templates.filter(t => true);
+    const tpl = available[tplRound % available.length];
+    const q = tpl.mk();
+    return { ...q, id: qId, type: 'single', level, difficulty: diffAtFn(level), module: modName, selected: true };
+  }
+
+  // ===== 多选题模板 =====
+  if (type === 'multi') {
+    const templates = [
+      { // 0. 典型表现
+        mk: () => {
+          if (hasPerform) return {
+            content: `在「${modName}」的教学中，以下哪些儿童行为值得教师重点关注并作为能力发展的积极信号？（多选）`,
+            options: [
+              `A. 儿童在操作后能够用自己的语言描述"我是怎么想的"`,
+              `B. 儿童在遇到困难时主动尝试不同方法，而非直接求助`,
+              `C. 儿童能将课堂上学到的方法迁移到新的情境中`,
+              `D. 儿童严格记住教师教的方法，从不犯错`,
+              `E. 儿童能够指出同伴解法中的合理之处与不足之处`
+            ],
+            answer: 'ABCE', point: `${modName}-积极表现识别`,
+            analysis: `ABCE均体现了儿童的主动思考与灵活应用，而D仅反映机械记忆。教师应重点观察儿童的思维过程而非答案对错。`
+          };
+          return {
+            content: `在促进「${modName}」发展的教学中，教师应重点关注哪些方面？（多选）`,
+            options: [
+              `A. 关注儿童的思维过程，而非仅关注答案对错`,
+              `B. 提供开放性的探索空间，允许儿童用多种方法解决`,
+              `C. 尊重个体差异，提供差异化支持`,
+              `D. 严格统一教学进度，对所有人一视同仁`,
+              `E. 将抽象概念与具体操作情境相结合`
+            ],
+            answer: 'ABCE', point: `${modName}-教学关注点`,
+            analysis: `ABCE符合因材施教的教育理念。D违背了个体差异原则。`
+          };
+        }
+      },
+      { // 1. 教学策略
+        mk: () => {
+          if (hasStrategy) return {
+            content: `以下哪些是教师在促进「${modName}」发展时应采用的有效策略？（多选）`,
+            options: [
+              `A. 根据儿童的表现灵活调整任务难度`,
+              `B. 为不同水平的儿童提供差异化的操作材料`,
+              `C. 在关键节点通过提问引导儿童深入思考`,
+              `D. 保持统一的教学节奏，不因个别儿童调整`,
+              `E. 创设真实或模拟的生活情境，让儿童在情境中运用所学`
+            ],
+            answer: 'ABCE', point: `${modName}-有效策略`,
+            analysis: `ABCE均为以儿童表现为中心的教学策略。D忽视了儿童的个体差异，不符合因材施教原则。`
+          };
+          return {
+            content: `良好的「${modName}」教学应具备哪些特征？（多选）`,
+            options: [
+              `A. 教学素材贴近儿童生活经验`,
+              `B. 为儿童提供充足的动手操作机会`,
+              `C. 教师能根据课堂中儿童的实时反馈灵活调整教学`,
+              `D. 以标准化的书面测试作为唯一评价方式`,
+              `E. 鼓励儿童表达自己的思考过程`
+            ],
+            answer: 'ABCE', point: `${modName}-教学特征`,
+            analysis: `ABCE体现了以儿童为中心的教学理念。D过于单一，忽略了过程性评价的价值。`
+          };
+        }
+      }
+    ];
+    const tpl = templates[tplRound % templates.length];
+    const q = tpl.mk();
+    return { ...q, id: qId, type: 'multi', level, difficulty: diffAtFn(level), module: modName, selected: true };
+  }
+
+  // ===== 判断题模板 =====
+  if (type === 'judge') {
+    const templates = [
+      { mk: () => ({
+        content: hasMistake
+          ? `判断以下观点："${modName}"发展的好坏主要取决于儿童的天赋，后天的教学环境对其影响不大。`
+          : `在「${modName}」教学中，教师应更多关注儿童的解题结果而非思考过程。`,
+        options: ['A. 正确', 'B. 错误'],
+        answer: '错误', point: `${modName}-核心理念辨析`,
+        analysis: hasMistake
+          ? `该观点属于\"天赋决定论\"误区。研究表明，适宜的教学环境和教师的专业引导对儿童${modName}的发展具有关键作用。`
+          : `教师应关注儿童的思维过程，理解儿童的解题策略与困难之处，而非仅看结果对错。`
+      })},
+      { mk: () => ({
+        content: hasStrategy
+          ? `在「${modName}」教学中，教师发现儿童操作方式单一时，最佳做法是立即示范正确方法并要求儿童模仿。`
+          : `${ageGroups[0] || '该年龄段'}儿童在「${modName}」方面已经具备了完整的抽象思维能力，教学可以完全脱离具体操作。`,
+        options: ['A. 正确', 'B. 错误'],
+        answer: '错误', point: `${modName}-教学理念`,
+        analysis: hasStrategy
+          ? `立即示范会剥夺儿童的探索机会。更好的做法是先观察分析儿童为何只用单一方法，然后通过启发性提问引导儿童发现更多可能性。`
+          : `儿童思维发展具有阶段性，教学需基于其当前发展水平，提供适宜的实物操作支持。`
+      })},
+      { mk: () => ({
+        content: `有效的「${modName}」教学应当将课堂活动与儿童的生活经验紧密联系，让儿童在熟悉的场景中自然发展相关能力。`,
+        options: ['A. 正确', 'B. 错误'],
+        answer: '正确', point: `${modName}-生活化教学`,
+        analysis: `生活化教学是${courseName}的重要理念，有助于儿童将抽象知识迁移到真实情境中。`
+      })}
+    ];
+    const tpl = templates[tplRound % templates.length];
+    const q = tpl.mk();
+    return { ...q, id: qId, type: 'judge', level, difficulty: diffAtFn(level), module: modName, selected: true };
+  }
+
+  // ===== 情境多选题模板 =====
+  // 给出一个复杂但典型的教学/儿童发展情境，让回答者选出所有合适的做法
+  if (type === 'scenario') {
+    const ageRange = ageGroups[0] || '该年龄段';
+    const fact1 = facts[0] || `${modName}需要教师的观察和引导`;
+    const fact2 = facts[1] || fact1;
+
+    const templates = [
+      // 0. 课堂教学情境：观察+应对
+      { mk: () => ({
+        content: `在一次「${modName}」的课堂教学活动中，你观察到以下现象：${ageRange}的儿童A在操作材料时反复尝试不同的方法，虽然偶尔出错但一直在调整；儿童B严格按照老师示范的方式操作，从不主动尝试新方法；儿童C则显得无所适从，看着材料迟迟不动手。
+
+面对这三种不同的表现，作为教师，以下哪些做法是合适的？（多选）`,
+        options: [
+          'A. 对儿童A，肯定其探索精神，并在其遇到瓶颈时以提问引导："你试了几种方法？哪种最快？为什么？"',
+          'B. 对儿童B，批评其缺乏创造力，要求他必须尝试与示范不同的方法',
+          'C. 对儿童B，先认可其规范操作的能力，然后逐步引导："你做得很好，我们来试试有没有其他方法也能完成？"',
+          'D. 对儿童C，立即手把手地帮他完成操作，确保跟上班上进度',
+          'E. 对儿童C，先通过一个更简单的同类任务建立信心，再逐步引导到当前任务'
+        ],
+        answer: 'ACE',
+        keywords: `${modName};差异教学;课堂观察`,
+        point: `${modName}-教学情境应对`,
+        analysis: `本题考查分层教学理念：对探索型儿童（A）应通过提问深化思考；对规范型儿童（B）应先认可再拓展，而非批评；对迟疑型儿童（C）应降低起点建立信心，而非包办代替。` + `核心理念：${fact1}。`
+      })},
+      // 1. 家庭教育/家校沟通情境
+      { mk: () => ({
+        content: `一位${ageRange}儿童的家长向你求助："我家孩子最近对数学特别抵触，一说要做数学题就哭。我试了奖励（做完给零食）、也试了惩罚（不做完不许看动画片），都没用。老师，我该怎么办？"
+
+结合「${modName}」的专业知识，以下哪些建议是合适的？（多选）`,
+        options: [
+          'A. 建议家长暂停所有数学练习，等孩子情绪平复后再重新开始',
+          'B. 告诉家长奖励和惩罚都是无效的激励方式，可能加剧孩子的焦虑和抵触',
+          'C. 建议将数学融入日常游戏（如数楼梯、分水果），让孩子在自然情境中体验数学的有趣',
+          'D. 建议增加练习量，让孩子尽快"脱敏"适应数学',
+          'E. 建议关注孩子"做对"的过程而非"做完"的结果，及时给予具体积极的反馈'
+        ],
+        answer: 'BCE',
+        keywords: `${modName};家长沟通;学习动机`,
+        point: `${modName}-家校共育策略`,
+        analysis: `儿童对数学的抵触情绪往往源于负面体验的积累。` + `${fact1}。外部奖惩会破坏内在动机；游戏化渗透和在过程中给予积极反馈是更有效的方式。`
+      })},
+      // 2. 综合教学策略选择
+      { mk: () => ({
+        content: `你所在的教研组正在讨论「${modName}」的教学方案。组里有几种不同观点：
+- 观点一：应该统一教学进度，确保所有儿童都达到同样的标准
+- 观点二：应该完全放手，让儿童自主探索，教师不做干预
+- 观点三：应该在观察儿童表现的基础上，根据不同发展水平提供差异化支持
+
+作为有经验的教师，你认为以下哪些做法最符合「${modName}」的有效教学原则？（多选）`,
+        options: [
+          'A. 课前通过简单任务评估每个儿童的当前发展水平，据此设计分层目标',
+          'B. 统一使用标准化教案，所有班级同步推进',
+          'C. 教学中持续观察记录，根据即时表现灵活调整互动方式',
+          'D. 完全让儿童自由活动，不设定任何教学目标',
+          'E. 定期对儿童的作品和操作过程进行记录分析，作为后续教学设计的依据'
+        ],
+        answer: 'ACE',
+        keywords: `${modName};教学设计;差异化`,
+        point: `${modName}-有效教学原则`,
+        analysis: `有效教学需要在观察、评估、设计、调整之间形成闭环。` + `${fact2}。选项ACE体现了"评估→观察→调整"的动态教学循环，B和D分别走向了标准化和放任两个极端。`
+      })},
+      // 3. 常见误区辨析
+      { mk: () => ({
+        content: `一位新教师在「${modName}」的教学反思中写道："我发现班里有个孩子总是'说不清楚'自己的思考过程，即使做对了也说不出为什么。我要求他每次做完题目后必须完整陈述解题步骤，但他越来越抗拒。"
+
+结合${ageRange}儿童的发展特点，以下分析哪些是正确的？（多选）`,
+        options: [
+          'A. 该儿童可能处于"能操作但无法清晰表达"的阶段，这是发展中常见的过渡状态',
+          'B. 儿童说不出过程说明他其实不理解，应该先暂停该领域的学习，回到前一个阶段',
+          'C. 可以用"你能指给我看你是怎么做的吗"替代"你说说为什么"，降低表达门槛',
+          'D. 硬性要求口头表达会增加儿童的挫败感，应该根据儿童的语言发展水平灵活调整',
+          'E. 这属于学习态度问题，应该加强纪律要求促使其改进'
+        ],
+        answer: 'ACD',
+        keywords: `${modName};发展规律;常见误区`,
+        point: `${modName}-儿童发展阶段辨识`,
+        analysis: '操作能力早于语言表达能力是儿童发展中常见的现象。' + `${fact1}。教师应尊重发展节奏，用多元化表达方式替代单一的口头陈述要求。`
+      })}
+    ];
+
+    const tpl = templates[tplRound % templates.length];
+    const q = tpl.mk();
+    return { ...q, id: qId, type: 'scenario', level, difficulty: diffAtFn(level), module: modName, selected: true };
+  }
+
+  // ===== 问答题模板 =====
+  if (type === 'qa') {
+    const fact1 = facts[0] || `${modName}的核心原理`;
+    const fact2 = facts[1] || fact1;
+    const templates = [
+      { mk: () => ({
+        content: `请简述「${fact1}」在${modName}教学中的重要意义，并举例说明教师应如何在课堂中加以运用。`,
+        answer: `参考要点：①${fact1}的定义与核心内涵；②对儿童发展的影响（认知/情感/社会性）；③教师在课堂中的具体应用策略；④注意事项或常见误区。`,
+        analysis: `本题考查对${modName}核心概念的理解及其教学应用能力，需结合理论与实践作答。`,
+        point: `${modName}·理论应用`
+      })},
+      { mk: () => ({
+        content: `在${modName}的学习与教学中，教师常面临${fact2}相关的挑战。请分析其原因，并提出2-3条切实可行的应对策略。`,
+        answer: `参考要点：①描述${fact2}相关挑战的具体表现；②分析形成原因（儿童发展规律/环境因素）；③提出策略（至少2条，需具体可操作）；④策略的预期效果。`,
+        analysis: `本题考查教师对${modName}实际教学问题的分析与解决能力，答案无唯一标准，言之有理即可。`,
+        point: `${modName}·问题解决`
+      })},
+      { mk: () => ({
+        content: `结合课程内容，请用自己的语言解释「${fact1}」与「${fact2}」的关系，并说明二者在儿童教育实践中如何相互影响。`,
+        answer: `参考要点：①分别解释${fact1}和${fact2}的含义；②阐述两者的联系（相互促进/递进关系等）；③举出教育实践中的具体案例；④对教师工作的启示。`,
+        analysis: `本题考查对课程核心概念之间关系的深度理解，需体现系统性思维。`,
+        point: `${modName}·概念整合`
+      })}
+    ];
+    const tpl = templates[qId % templates.length];
+    const q = tpl.mk();
+    return { ...q, id: qId, type: 'qa', level, difficulty: diffAtFn(level), module: modName, selected: true, options: [] };
+  }
+
+  return null;
+}
+
+// ========================
+// Render Questions
+// ========================
+function renderGeneratedQuestions(questions) {
+  const list = document.getElementById('questionList');
+  list.innerHTML = '';
+  
+  questions.forEach((q, idx) => {
+    list.appendChild(createQuestionCard(q, idx, 'generated'));
+  });
+
+  document.getElementById('stat-total').textContent = questions.length;
+  document.getElementById('stat-types').textContent = [...new Set(questions.map(q => q.type))].length;
+  document.getElementById('stat-levels').textContent = [...new Set(questions.map(q => q.level))].length;
+  updateSelectedCount();
+}
+
+function createQuestionCard(q, idx, context) {
+  const typeMap = { single: '单选题', multi: '多选题', judge: '判断题', scenario: '情境多选题', qa: '问答题' };
+  const typeCls = { single: 'tag-type-single', multi: 'tag-type-multi', judge: 'tag-type-judge', scenario: 'tag-type-scenario', qa: 'tag-type-qa' };
+  const levelCls = { L1: 'tag-l1', L2: 'tag-l2', L3: 'tag-l3' };
+  
+  const div = document.createElement('div');
+  div.className = 'question-card' + (q.selected && context === 'generated' ? ' selected' : '') + (context === 'compose' && state.selectedForExam.has(q.id) ? ' selected' : '');
+  div.id = 'qcard-' + q.id;
+
+  let optionsHtml = '';
+  if (q.options && q.options.length) {
+    const correctLetters = (q.answer || '').split('').filter(c => /[A-Z]/.test(c));
+    optionsHtml = '<div class="options">' + q.options.map(opt => {
+      const letter = opt.charAt(0);
+      const isCorrect = q.type === 'judge' ? 
+        (q.answer === '正确' && opt.includes('正确')) || (q.answer === '错误' && opt.includes('错误')) :
+        correctLetters.includes(letter);
+      return `<div class="option ${isCorrect ? 'correct' : ''}">${isCorrect ? '✓ ' : ''}${opt}</div>`;
+    }).join('') + '</div>';
+  }
+
+  const answerHtml = `<div class="answer-info">
+    <strong>${q.type === 'qa' ? '【参考答案要点】' : '【正确答案】'}</strong>${q.answer || ''}&nbsp;&nbsp;
+    <strong>【难易度】</strong>${q.difficulty || '中'}&nbsp;&nbsp;
+    <strong>【考核点】</strong>${q.point || ''}<br>
+    ${q.keywords ? '<strong>【关键词】</strong>' + q.keywords + '<br>' : ''}
+    ${q.analysis ? '<strong>【试题解析】</strong>' + q.analysis : ''}
+  </div>`;
+
+  const checkHtml = (context === 'generated') ? 
+    `<div class="check-select ${q.selected ? 'checked' : ''}" id="check-${q.id}" onclick="toggleSelect(${q.id})">✓</div>` : 
+    (context === 'compose' ? `<div class="check-select ${state.selectedForExam.has(q.id) ? 'checked' : ''}" id="check-${q.id}" onclick="toggleCompose(${q.id})">✓</div>` : '');
+
+  div.innerHTML = `
+    ${checkHtml}
+    <div class="question-meta">
+      <span class="question-num">Q${idx + 1}</span>
+      <span class="tag ${typeCls[q.type] || ''}">${typeMap[q.type] || q.type}</span>
+      <span class="tag ${levelCls[q.level] || ''}">${q.level || ''}</span>
+      <span style="font-size:12px;color:var(--gray-500)">${q.module || ''}</span>
+    </div>
+    <div class="question-content">${q.content}</div>
+    ${optionsHtml}
+    ${answerHtml}
+    <div class="question-actions">
+      <button class="btn btn-outline btn-sm" onclick="editQuestion(${q.id}, '${context}')">✏️ 编辑</button>
+      <button class="btn btn-outline btn-sm" onclick="regenerateOne(${q.id})">🔄 重新出题</button>
+      ${context === 'bank' ? `<button class="btn btn-outline btn-sm" onclick="deleteFromBank(${q.id})">🗑️ 删除</button>` : ''}
+      ${context === 'generated' && !q.inBank ? `<button class="btn btn-success btn-sm" onclick="addOneToBank(${q.id})">➕ 加入题库</button>` : ''}
+    </div>
+  `;
+  return div;
+}
+
+// ========================
+// Question Selection
+// ========================
+function toggleSelect(id) {
+  const q = state.generatedQuestions.find(q => q.id === id);
+  if (q) {
+    q.selected = !q.selected;
+    const card = document.getElementById('qcard-' + id);
+    const check = document.getElementById('check-' + id);
+    if (card) card.classList.toggle('selected', q.selected);
+    if (check) check.classList.toggle('checked', q.selected);
+    updateSelectedCount();
+  }
+}
+
+function selectAll() {
+  state.generatedQuestions.forEach(q => q.selected = true);
+  renderGeneratedQuestions(state.generatedQuestions);
+}
+
+function deselectAll() {
+  state.generatedQuestions.forEach(q => q.selected = false);
+  renderGeneratedQuestions(state.generatedQuestions);
+}
+
+function updateSelectedCount() {
+  const count = state.generatedQuestions.filter(q => q.selected).length;
+  document.getElementById('stat-selected').textContent = count;
+}
+
+// ========================
+// Bank Management
+// ========================
+function addSelectedToBank() {
+  const selected = state.generatedQuestions.filter(q => q.selected);
+  if (!selected.length) {
+    showToast('⚠️ 请先选择要加入题库的题目', 'warning');
+    return;
+  }
+  let added = 0;
+  selected.forEach(q => {
+    if (!state.questionBank.find(b => b.id === q.id)) {
+      state.questionBank.push({ ...q, inBank: true });
+      added++;
+    }
+  });
+  saveBank();
+  updateBadges();
+  showToast(`✅ 已将 ${added} 道题目加入题库`, 'success');
+}
+
+function addOneToBank(id) {
+  const q = state.generatedQuestions.find(q => q.id === id);
+  if (q && !state.questionBank.find(b => b.id === id)) {
+    state.questionBank.push({ ...q, inBank: true });
+    q.inBank = true;
+    saveBank();
+    updateBadges();
+    showToast('✅ 已加入题库', 'success');
+    renderGeneratedQuestions(state.generatedQuestions);
+  }
+}
+
+function deleteFromBank(id) {
+  state.questionBank = state.questionBank.filter(q => q.id !== id);
+  state.selectedForExam.delete(id);
+  saveBank();
+  updateBadges();
+  renderBank();
+  showToast('🗑️ 已从题库删除', 'success');
+}
+
+function clearBank() {
+  if (confirm('确定要清空所有题库吗？此操作不可恢复。')) {
+    state.questionBank = [];
+    state.selectedForExam.clear();
+    saveBank();
+    updateBadges();
+    renderBank();
+    showToast('题库已清空', 'info');
+  }
+}
+
+function saveBank() {
+  localStorage.setItem('questionBank', JSON.stringify(state.questionBank));
+}
+
+function renderBank(filter) {
+  const list = document.getElementById('bankList');
+  filter = filter || state.currentFilter;
+  
+  let filtered = state.questionBank;
+  if (filter && filter !== 'all') {
+    if (['single','multi','judge','scenario','qa'].includes(filter)) {
+      filtered = filtered.filter(q => q.type === filter);
+    } else if (['L1','L2','L3'].includes(filter)) {
+      filtered = filtered.filter(q => q.level === filter);
+    }
+  }
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)"><div style="font-size:48px;margin-bottom:12px">📭</div><p>' + (state.questionBank.length ? '没有符合条件的题目' : '题库暂无题目') + '</p></div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach((q, idx) => list.appendChild(createQuestionCard(q, idx, 'bank')));
+}
+
+function filterBank(filter, btn) {
+  state.currentFilter = filter;
+  document.querySelectorAll('#bankFilters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderBank(filter);
+}
+
+// ========================
+// Compose
+// ========================
+let composeFilter = 'all';
+
+function renderCompose() {
+  const list = document.getElementById('composeList');
+  let filtered = state.questionBank;
+  if (composeFilter !== 'all') {
+    filtered = filtered.filter(q => q.type === composeFilter);
+  }
+  
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)"><div style="font-size:48px;margin-bottom:12px">📭</div><p>' + (state.questionBank.length ? '该分类暂无题目' : '请先在题库中添加题目') + '</p></div>';
+    updateComposeStats();
+    return;
+  }
+  
+  list.innerHTML = '';
+  filtered.forEach((q, idx) => list.appendChild(createQuestionCard(q, idx, 'compose')));
+  updateComposeStats();
+}
+
+function filterCompose(filter, btn) {
+  composeFilter = filter;
+  document.querySelectorAll('.compose-layout .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCompose();
+}
+
+function toggleCompose(id) {
+  if (state.selectedForExam.has(id)) {
+    state.selectedForExam.delete(id);
+  } else {
+    state.selectedForExam.add(id);
+  }
+  const card = document.getElementById('qcard-' + id);
+  const check = document.getElementById('check-' + id);
+  if (card) card.classList.toggle('selected', state.selectedForExam.has(id));
+  if (check) check.classList.toggle('checked', state.selectedForExam.has(id));
+  updateComposeStats();
+  updateBadges();
+}
+
+function updateComposeStats() {
+  const selected = state.questionBank.filter(q => state.selectedForExam.has(q.id));
+  document.getElementById('composeStat-total').textContent = selected.length + ' 题';
+  document.getElementById('composeStat-single').textContent = selected.filter(q => q.type === 'single').length;
+  document.getElementById('composeStat-multi').textContent = selected.filter(q => q.type === 'multi').length;
+  document.getElementById('composeStat-judge').textContent = selected.filter(q => q.type === 'judge').length;
+  document.getElementById('composeStat-scenario').textContent = selected.filter(q => q.type === 'scenario').length;
+  document.getElementById('composeStat-qa').textContent = selected.filter(q => q.type === 'qa').length;
+  document.getElementById('composeStat-l1').textContent = selected.filter(q => q.level === 'L1').length;
+  document.getElementById('composeStat-l2').textContent = selected.filter(q => q.level === 'L2').length;
+  document.getElementById('composeStat-l3').textContent = selected.filter(q => q.level === 'L3').length;
+}
+
+function autoCompose() {
+  // Auto-select based on standard distribution
+  state.selectedForExam.clear();
+  const singles = state.questionBank.filter(q => q.type === 'single').slice(0, 4);
+  const multis = state.questionBank.filter(q => q.type === 'multi').slice(0, 3);
+  const judges = state.questionBank.filter(q => q.type === 'judge').slice(0, 2);
+  const scenarios = state.questionBank.filter(q => q.type === 'scenario').slice(0, 1);
+  [...singles, ...multis, ...judges, ...scenarios].forEach(q => state.selectedForExam.add(q.id));
+  renderCompose();
+  updateBadges();
+  showToast('✅ 已按标准分配自动组卷（10题）', 'success');
+}
+
+function goToExport() {
+  if (state.selectedForExam.size === 0) {
+    showToast('⚠️ 请先选择题目', 'warning');
+    return;
+  }
+  navigate('export');
+}
+
+// ========================
+// Export
+// ========================
+function renderExport() {
+  const selected = state.questionBank.filter(q => state.selectedForExam.has(q.id));
+  if (!selected.length) {
+    document.getElementById('exportPreview').innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)"><div style="font-size:48px;margin-bottom:12px">📄</div><p>请先完成组卷操作</p></div>';
+    return;
+  }
+
+  const title = document.getElementById('examTitle').value || '综合测试卷';
+  const desc = document.getElementById('examDesc').value;
+  
+  const typeMap = { single: '单选题', multi: '多选题', judge: '判断题', scenario: '多选题', qa: '问答题' };
+  const groups = {};
+  selected.forEach(q => {
+    if (!groups[q.type]) groups[q.type] = [];
+    groups[q.type].push(q);
+  });
+
+  let html = `<div class="export-preview">
+    <div class="preview-title">${title}</div>
+    <div class="preview-subtitle">共 ${selected.length} 题 | 生成时间：${new Date().toLocaleDateString('zh-CN')}</div>
+    ${desc ? `<div style="margin-bottom:20px;padding:12px;background:var(--gray-50);border-radius:8px;font-size:13px">${desc}</div>` : ''}`;
+
+  const typeOrder = ['single', 'multi', 'judge', 'scenario', 'qa'];
+  typeOrder.forEach(type => {
+    if (!groups[type]) return;
+    groups[type].forEach((q, qi) => {
+      // 每道题前面标注题型
+      html += `<div class="preview-question" style="margin-bottom:20px">
+        <div style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:8px">【${typeMap[type]}】</div>
+        <div class="preview-question-title">${q.content}</div>`;
+
+      // 问答题：无选项，直接显示空白作答区
+      if (type === 'qa') {
+        html += `<div style="border:1px dashed var(--gray-300);border-radius:6px;min-height:60px;margin-top:8px;padding:8px;color:var(--gray-400);font-size:13px">（请在此作答）</div>`;
+      } else if (type === 'judge') {
+        html += `<div class="preview-option" style="padding-left:0;line-height:1.8">A、正确</div>`;
+        html += `<div class="preview-option" style="padding-left:0;line-height:1.8">B、错误</div>`;
+      } else if (q.options && q.options.length) {
+        q.options.forEach((opt, idx) => {
+          html += `<div class="preview-option" style="padding-left:0;line-height:1.8">${normalizeOption(opt, idx)}</div>`;
+        });
+      }
+
+      // 判断题答案标准化，问答题直接用参考答案
+      const answer = type === 'judge' ? normalizeJudgeAnswer(q.answer) : q.answer;
+      const answerLabel = type === 'qa' ? '参考答案要点' : '正确答案';
+      const pointText = q.point ? q.point.replace(/[,，、]/g, '；') : '';
+
+      html += `<div class="preview-meta" style="margin-top:6px">
+        【${answerLabel}】${answer}
+        <br>【难易度】${q.difficulty || '中'}
+        <br>【考核点】${pointText}
+        ${q.analysis ? '<br>【试题解析】' + q.analysis : ''}
+      </div></div>`;
+      // 题目间隔：两排空行（最后一道题不加）
+      if (qi < groups[type].length - 1) html += `<div style="height:2em"></div>`;
+    });
+  });
+
+  html += `</div>`;
+  document.getElementById('exportPreview').innerHTML = html;
+}
+
+/**
+ * 将选项文本中的前缀统一转换为 A、B、C、D、E 格式
+ * @param {string} opt - 原始选项文本（如 "A. xxx" 或 "A、xxx"）
+ * @param {number} idx - 选项索引（0=A, 1=B, ...）
+ * @returns {string} "A、xxx" 格式的选项文本
+ */
+function normalizeOption(opt, idx) {
+  const letter = String.fromCharCode(65 + idx); // A=65
+  // 去掉已有的各种前缀：A. A、 A) A） A．
+  const cleaned = opt.replace(/^[A-Z][\.、,，．)\）\s]+/, '').trim();
+  return `${letter}、${cleaned}`;
+}
+
+/**
+ * 将判断题答案统一为 A/B 格式
+ * @param {string} answer - "正确"/"错误" 或 "A"/"B"
+ * @returns {string} "A" 或 "B"
+ */
+function normalizeJudgeAnswer(answer) {
+  if (!answer) return '';
+  const a = answer.trim();
+  if (a === '正确' || a === '对' || a === 'A' || a === 'a') return 'A';
+  if (a === '错误' || a === '错' || a === 'B' || a === 'b') return 'B';
+  return a;
+}
+
+async function exportDocx() {
+  const selected = state.questionBank.filter(q => state.selectedForExam.has(q.id));
+  if (!selected.length) {
+    showToast('⚠️ 没有可导出的题目', 'warning');
+    return;
+  }
+
+  const title = document.getElementById('examTitle').value || '综合测试卷';
+  const desc = document.getElementById('examDesc').value;
+
+  showToast('⏳ 正在生成 Word 文档...', 'info');
+
+  try {
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } = docx;
+    
+    const typeMap = { single: '单选题', multi: '多选题', judge: '判断题', scenario: '多选题', qa: '问答题' };
+    const typeOrder = ['single', 'multi', 'judge', 'scenario', 'qa'];
+    const groups = {};
+    selected.forEach(q => {
+      if (!groups[q.type]) groups[q.type] = [];
+      groups[q.type].push(q);
+    });
+
+    const children = [];
+
+    // Title
+    children.push(new Paragraph({
+      children: [new TextRun({ text: title, bold: true, size: 36, color: '1a1a2e' })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 }
+    }));
+
+    // Meta
+    children.push(new Paragraph({
+      children: [new TextRun({ text: `共 ${selected.length} 题 | 生成时间：${new Date().toLocaleDateString('zh-CN')}`, size: 22, color: '666666' })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 }
+    }));
+
+    if (desc) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: desc, size: 22, color: '555555' })],
+        spacing: { after: 300 }
+      }));
+    }
+
+    typeOrder.forEach(type => {
+      if (!groups[type]) return;
+
+      groups[type].forEach(q => {
+        // ===== 题型标签 — 每道题前面标注【单选题】/【多选题】/【判断题】/【多选题】 =====
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `【${typeMap[type]}】`, bold: true, size: 26, color: '4F46E5' })],
+          spacing: { before: 280, after: 120 }
+        }));
+
+        // ===== 题目正文（无题号） =====
+        children.push(new Paragraph({
+          children: [new TextRun({ text: q.content, bold: false, size: 24 })],
+          spacing: { after: 100 }
+        }));
+
+        // ===== 选项 =====
+        if (type === 'judge') {
+          // 判断题：A、正确 / B、错误
+          children.push(new Paragraph({
+            children: [new TextRun({ text: 'A、正确', size: 22 })],
+            spacing: { after: 40 }
+          }));
+          children.push(new Paragraph({
+            children: [new TextRun({ text: 'B、错误', size: 22 })],
+            spacing: { after: 60 }
+          }));
+        } else if (q.options && q.options.length) {
+          // 单选/多选/情境多选：A、B、C、D、E 格式
+          q.options.forEach((opt, idx) => {
+            children.push(new Paragraph({
+              children: [new TextRun({ text: normalizeOption(opt, idx), size: 22 })],
+              spacing: { after: 40 }
+            }));
+          });
+        }
+
+        // ===== 正确答案 =====
+        const answer = type === 'judge' ? normalizeJudgeAnswer(q.answer) : q.answer;
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `【正确答案】${answer}`, size: 21, color: '374151' })],
+          spacing: { before: 80, after: 40 }
+        }));
+
+        // ===== 难易度 =====
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `【难易度】${q.difficulty || '中'}`, size: 21, color: '374151' })],
+          spacing: { after: 40 }
+        }));
+
+        // ===== 考核点 =====
+        const point = q.point ? q.point.replace(/[,，、]/g, '；') : '';
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `【考核点】${point}`, size: 21, color: '374151' })],
+          spacing: { after: 40 }
+        }));
+
+        // ===== 试题解析 =====
+        if (q.analysis) {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: `【试题解析】${q.analysis}`, size: 21, color: '374151' })],
+            spacing: { after: 120 }
+          }));
+        }
+
+        // ===== 题目间隔：两排空行 =====
+        children.push(new Paragraph({ children: [new TextRun({ text: '', size: 4 })], spacing: { after: 0 } }));
+        children.push(new Paragraph({ children: [new TextRun({ text: '', size: 4 })], spacing: { after: 0 } }));
+      });
+    });
+
+    const doc = new Document({
+      sections: [{ properties: {}, children }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.docx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Word 文档已下载！', 'success');
+  } catch(e) {
+    showToast('❌ 导出失败：' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+// ========================
+// Edit Question
+// ========================
+function editQuestion(id, context) {
+  const q = (context === 'bank' ? state.questionBank : state.generatedQuestions).find(q => q.id === id) ||
+            state.questionBank.find(q => q.id === id) ||
+            state.generatedQuestions.find(q => q.id === id);
+  if (!q) return;
+  
+  state.editingQuestion = { q, context };
+
+  const typeMap = { single: '单选题', multi: '多选题', judge: '判断题', scenario: '情境多选题' };
+  const levelMap = { L1: 'L1 基础层', L2: 'L2 进阶层', L3: 'L3 挑战层' };
+  
+  let optionsHtml = '';
+  if (q.options) {
+    q.options.forEach((opt, i) => {
+      optionsHtml += `<input class="form-input" id="edit-opt-${i}" value="${opt.replace(/"/g, '&quot;')}" style="margin-bottom:8px">`;
+    });
+  }
+
+  document.getElementById('editModalContent').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div class="form-group">
+        <label class="form-label">题型</label>
+        <select class="form-select" id="edit-type">
+          ${Object.entries(typeMap).map(([v,l]) => `<option value="${v}" ${q.type===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">难度</label>
+        <select class="form-select" id="edit-level">
+          ${Object.entries(levelMap).map(([v,l]) => `<option value="${v}" ${q.level===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">题目内容</label>
+      <textarea class="form-textarea" id="edit-content">${q.content}</textarea>
+    </div>
+    ${optionsHtml ? `<div class="form-group" style="margin-bottom:12px"><label class="form-label">选项</label>${optionsHtml}</div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="form-group">
+        <label class="form-label">正确答案</label>
+        <input class="form-input" id="edit-answer" value="${q.answer || ''}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">难易度标注</label>
+        <select class="form-select" id="edit-difficulty">
+          <option value="易" ${q.difficulty==='易'?'selected':''}>易</option>
+          <option value="中" ${q.difficulty==='中'?'selected':''}>中</option>
+          <option value="难" ${q.difficulty==='难'?'selected':''}>难</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">考核点</label>
+      <input class="form-input" id="edit-point" value="${q.point || ''}">
+    </div>
+    ${q.keywords !== undefined ? `<div class="form-group" style="margin-bottom:12px"><label class="form-label">关键词（用分号隔开）</label><input class="form-input" id="edit-keywords" value="${q.keywords || ''}"></div>` : ''}
+    <div class="form-group" style="margin-bottom:0">
+      <label class="form-label">试题解析</label>
+      <textarea class="form-textarea" id="edit-analysis" style="min-height:70px">${q.analysis || ''}</textarea>
+    </div>
+  `;
+
+  document.getElementById('editModal').classList.add('show');
+}
+
+function saveEdit() {
+  const { q, context } = state.editingQuestion;
+  q.type = document.getElementById('edit-type').value;
+  q.level = document.getElementById('edit-level').value;
+  q.content = document.getElementById('edit-content').value;
+  q.answer = document.getElementById('edit-answer').value;
+  q.difficulty = document.getElementById('edit-difficulty').value;
+  q.point = document.getElementById('edit-point').value;
+  if (document.getElementById('edit-analysis')) q.analysis = document.getElementById('edit-analysis').value;
+  if (document.getElementById('edit-keywords')) q.keywords = document.getElementById('edit-keywords').value;
+  
+  if (q.options) {
+    q.options.forEach((_, i) => {
+      const inp = document.getElementById('edit-opt-' + i);
+      if (inp) q.options[i] = inp.value;
+    });
+  }
+
+  // Update in both bank and generated
+  const bankIdx = state.questionBank.findIndex(b => b.id === q.id);
+  if (bankIdx >= 0) state.questionBank[bankIdx] = { ...q };
+  const genIdx = state.generatedQuestions.findIndex(g => g.id === q.id);
+  if (genIdx >= 0) state.generatedQuestions[genIdx] = { ...q };
+
+  saveBank();
+  closeEditModal();
+
+  if (context === 'bank') renderBank();
+  else if (context === 'compose') renderCompose();
+  else renderGeneratedQuestions(state.generatedQuestions);
+
+  showToast('✅ 题目已更新', 'success');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+  state.editingQuestion = null;
+}
+
+// ========================
+// Regenerate One
+// ========================
+async function regenerateOne(id) {
+  const q = state.generatedQuestions.find(q => q.id === id) || state.questionBank.find(q => q.id === id);
+  if (!q) return;
+
+  showToast('🔄 正在重新生成这道题...', 'info');
+
+  try {
+    let newQ;
+    if (state.settings.isDemoMode || !state.settings.apiKey) {
+      await fakeDelay(1500);
+      const knowledge = extractKnowledge(state.courseContent, q.module);
+      // 生成与该题相同题型的一道题
+      const singleTypeCounts = { single: 0, multi: 0, judge: 0, scenario: 0 };
+      singleTypeCounts[q.type] = 1;
+      const singleLevels = [q.level];
+      const demos = buildContentBasedQuestions(knowledge, q.module, singleTypeCounts, singleLevels, state.settings.focusDirection);
+      const base = demos[0];
+      if (base) {
+        newQ = { ...base, id: q.id, module: q.module, level: q.level, inBank: q.inBank, selected: q.selected };
+      }
+    } else {
+      // Call AI for single question
+      const prompt = `根据以下课程内容，重新生成一道 ${q.type === 'single' ? '单选题' : q.type === 'multi' ? '多选题' : q.type === 'judge' ? '判断题' : '情境多选题'}（${q.level}难度）。
+课程内容：${state.courseContent.substring(0, 1000)}
+以JSON格式返回：{"type":"${q.type}","level":"${q.level}","content":"","options":[],"answer":"","point":"","analysis":"","difficulty":"","keywords":""}`;
+      const response = await fetch(state.settings.apiBaseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.settings.apiKey },
+        body: JSON.stringify({ model: state.settings.apiModel, messages: [{ role: 'user', content: prompt }], temperature: 0.9, max_tokens: 800 })
+      });
+      const data = await response.json();
+      const text = data.choices[0].message.content;
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        newQ = { ...parsed, id: q.id, module: q.module, inBank: q.inBank, selected: q.selected };
+      }
+    }
+    
+    if (newQ) {
+      // Update in arrays
+      const genIdx = state.generatedQuestions.findIndex(g => g.id === id);
+      if (genIdx >= 0) state.generatedQuestions[genIdx] = newQ;
+      const bankIdx = state.questionBank.findIndex(b => b.id === id);
+      if (bankIdx >= 0) state.questionBank[bankIdx] = newQ;
+      saveBank();
+      
+      // Re-render current view
+      const activePage = document.querySelector('.page.active').id;
+      if (activePage === 'page-generate') renderGeneratedQuestions(state.generatedQuestions);
+      else if (activePage === 'page-bank') renderBank();
+      
+      showToast('✅ 题目已重新生成', 'success');
+    }
+  } catch(e) {
+    showToast('❌ 重新生成失败：' + e.message, 'error');
+  }
+}
+
+// ========================
+// Settings
+// ========================
+function loadSettings() {
+  document.getElementById('apiBaseUrl').value = state.settings.apiBaseUrl;
+  document.getElementById('apiKey').value = state.settings.apiKey;
+  document.getElementById('apiModel').value = state.settings.apiModel;
+  // 加载出题规范滑块
+  document.getElementById('l1Slider').value = state.settings.diffL1;
+  document.getElementById('l2Slider').value = state.settings.diffL2;
+  document.getElementById('l3Slider').value = state.settings.diffL3;
+  document.getElementById('l1Val').textContent = state.settings.diffL1 + '%';
+  document.getElementById('l2Val').textContent = state.settings.diffL2 + '%';
+  document.getElementById('l3Val').textContent = state.settings.diffL3 + '%';
+  document.getElementById('tSingleSlider').value = state.settings.typeSingle;
+  document.getElementById('tMultiSlider').value = state.settings.typeMulti;
+  document.getElementById('tJudgeSlider').value = state.settings.typeJudge;
+  document.getElementById('tScenarioSlider').value = state.settings.typeScenario;
+  document.getElementById('tQASlider').value = state.settings.typeQA;
+  document.getElementById('tSingleVal').textContent = state.settings.typeSingle + '%';
+  document.getElementById('tMultiVal').textContent = state.settings.typeMulti + '%';
+  document.getElementById('tJudgeVal').textContent = state.settings.typeJudge + '%';
+  document.getElementById('tScenarioVal').textContent = state.settings.typeScenario + '%';
+  document.getElementById('tQAVal').textContent = state.settings.typeQA + '%';
+  validateDiff(); validateType();
+}
+
+// 难度滑块联动：拖动某项时自动按比例缩放其他两项
+function onDiffSlider(changed) {
+  const ids = ['l1', 'l2', 'l3'];
+  const vals = {};
+  ids.forEach(id => { vals[id] = parseInt(document.getElementById(id + 'Slider').value); });
+  const others = ids.filter(id => id !== changed);
+  const changedVal = vals[changed];
+  const remaining = 100 - changedVal;
+  const otherSum = others.reduce((s, id) => s + vals[id], 0);
+  if (otherSum === 0) {
+    others.forEach((id, i) => { vals[id] = i === 0 ? remaining : 0; });
+  } else {
+    let distributed = 0;
+    others.forEach((id, i) => {
+      if (i < others.length - 1) {
+        const v = Math.round(vals[id] / otherSum * remaining / 5) * 5;
+        vals[id] = v;
+        distributed += v;
+      } else {
+        vals[id] = remaining - distributed;
+      }
+    });
+  }
+  ids.forEach(id => {
+    document.getElementById(id + 'Slider').value = vals[id];
+    document.getElementById(id + 'Val').textContent = vals[id] + '%';
+  });
+  validateDiff();
+}
+
+// 题型滑块联动
+function onTypeSlider(changed) {
+  const map = { single: 'tSingle', multi: 'tMulti', judge: 'tJudge', scenario: 'tScenario', qa: 'tQA' };
+  const keys = Object.keys(map);
+  const vals = {};
+  keys.forEach(k => { vals[k] = parseInt(document.getElementById(map[k] + 'Slider').value); });
+  const others = keys.filter(k => k !== changed);
+  const changedVal = vals[changed];
+  const remaining = 100 - changedVal;
+  const otherSum = others.reduce((s, k) => s + vals[k], 0);
+  if (otherSum === 0) {
+    others.forEach((k, i) => { vals[k] = i === 0 ? remaining : 0; });
+  } else {
+    let distributed = 0;
+    others.forEach((k, i) => {
+      if (i < others.length - 1) {
+        const v = Math.round(vals[k] / otherSum * remaining / 5) * 5;
+        vals[k] = v;
+        distributed += v;
+      } else {
+        vals[k] = remaining - distributed;
+      }
+    });
+  }
+  keys.forEach(k => {
+    document.getElementById(map[k] + 'Slider').value = vals[k];
+    document.getElementById(map[k] + 'Val').textContent = vals[k] + '%';
+  });
+  validateType();
+}
+
+function validateDiff() {
+  const total = ['l1','l2','l3'].reduce((s,id) => s + parseInt(document.getElementById(id+'Slider').value), 0);
+  const warn = document.getElementById('diffWarning');
+  document.getElementById('diffTotal').textContent = total;
+  warn.style.display = (total !== 100) ? 'block' : 'none';
+}
+
+function validateType() {
+  const map = { tSingle: 'tSingleSlider', tMulti: 'tMultiSlider', tJudge: 'tJudgeSlider', tScenario: 'tScenarioSlider', tQA: 'tQASlider' };
+  const total = Object.values(map).reduce((s, id) => s + parseInt(document.getElementById(id).value), 0);
+  const warn = document.getElementById('typeWarning');
+  document.getElementById('typeTotal').textContent = total;
+  warn.style.display = (total !== 100) ? 'block' : 'none';
+}
+
+function saveStandards() {
+  const diffTotal = ['l1','l2','l3'].reduce((s,id) => s + parseInt(document.getElementById(id+'Slider').value), 0);
+  const typeTotal = ['tSingle','tMulti','tJudge','tScenario','tQA'].reduce((s,k) => s + parseInt(document.getElementById(k+'Slider').value), 0);
+  if (diffTotal !== 100) { showToast('⚠️ 难度比例合计须为100%，当前为' + diffTotal + '%', 'warning'); return; }
+  if (typeTotal !== 100) { showToast('⚠️ 题型比例合计须为100%，当前为' + typeTotal + '%', 'warning'); return; }
+  state.settings.diffL1 = parseInt(document.getElementById('l1Slider').value);
+  state.settings.diffL2 = parseInt(document.getElementById('l2Slider').value);
+  state.settings.diffL3 = parseInt(document.getElementById('l3Slider').value);
+  state.settings.typeSingle   = parseInt(document.getElementById('tSingleSlider').value);
+  state.settings.typeMulti    = parseInt(document.getElementById('tMultiSlider').value);
+  state.settings.typeJudge    = parseInt(document.getElementById('tJudgeSlider').value);
+  state.settings.typeScenario = parseInt(document.getElementById('tScenarioSlider').value);
+  state.settings.typeQA       = parseInt(document.getElementById('tQASlider').value);
+  ['diffL1','diffL2','diffL3','typeSingle','typeMulti','typeJudge','typeScenario','typeQA'].forEach(k => {
+    localStorage.setItem(k, state.settings[k]);
+  });
+  showToast('✅ 出题规范已保存', 'success');
+}
+
+function resetStandards() {
+  const defaults = { diffL1:60, diffL2:30, diffL3:10, typeSingle:40, typeMulti:20, typeJudge:20, typeScenario:10, typeQA:10 };
+  Object.assign(state.settings, defaults);
+  Object.keys(defaults).forEach(k => localStorage.setItem(k, defaults[k]));
+  loadSettings();
+  showToast('✅ 已恢复默认规范', 'success');
+}
+
+// 渲染首页"出题规范预览"表格（动态）
+function renderStandardsPreview() {
+  const grid = document.getElementById('standardsPreviewGrid');
+  if (!grid) return;
+  const s = state.settings;
+  const totalCount = 10; // 预览以10题为基准
+  const l1n = Math.round(totalCount * s.diffL1 / 100);
+  const l2n = Math.round(totalCount * s.diffL2 / 100);
+  const l3n = totalCount - l1n - l2n;
+  const sn  = Math.round(totalCount * s.typeSingle   / 100);
+  const mn  = Math.round(totalCount * s.typeMulti    / 100);
+  const jn  = Math.round(totalCount * s.typeJudge    / 100);
+  const scn = Math.round(totalCount * s.typeScenario / 100);
+  const qan = totalCount - sn - mn - jn - scn;
+  grid.innerHTML = `
+    <div>
+      <p class="section-title">标准一：题量与难度配比（每模块10题）</p>
+      <table class="standard-table">
+        <thead><tr><th>难度等级</th><th>题数</th><th>目标答对率</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-l1">L1 基础层</span></td><td>${l1n}题（${s.diffL1}%）</td><td>≥90%</td></tr>
+          <tr><td><span class="badge badge-l2">L2 进阶层</span></td><td>${l2n}题（${s.diffL2}%）</td><td>60%-80%</td></tr>
+          <tr><td><span class="badge badge-l3">L3 挑战层</span></td><td>${l3n}题（${s.diffL3}%）</td><td>30%-50%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <p class="section-title">标准二：题型规范（每模块10题）</p>
+      <table class="standard-table">
+        <thead><tr><th>题型</th><th>占比</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>单选题</td><td>${s.typeSingle}%（${sn}题）</td><td>4选1</td></tr>
+          <tr><td>多选题</td><td>${s.typeMulti}%（${mn}题）</td><td>全部选对满分</td></tr>
+          <tr><td>判断题</td><td>${s.typeJudge}%（${jn}题）</td><td>快速筛查误区</td></tr>
+          <tr><td>情境多选题</td><td>${s.typeScenario}%（${scn < 0 ? 0 : scn}题）</td><td>复杂情境应对</td></tr>
+          <tr><td>问答题</td><td>${s.typeQA}%（${qan < 0 ? 0 : qan}题）</td><td>开放性简答</td></tr>
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function saveSettings() {
+  state.settings.apiBaseUrl = document.getElementById('apiBaseUrl').value;
+  state.settings.apiKey = document.getElementById('apiKey').value;
+  state.settings.apiModel = document.getElementById('apiModel').value;
+  if (state.settings.apiKey && state.settings.apiKey !== 'demo-mode') {
+    state.settings.isDemoMode = false;
+    localStorage.setItem('isDemoMode', 'false');
+  }
+  localStorage.setItem('apiBaseUrl', state.settings.apiBaseUrl);
+  localStorage.setItem('apiKey', state.settings.apiKey);
+  localStorage.setItem('apiModel', state.settings.apiModel);
+  showToast('✅ 配置已保存', 'success');
+}
+
+async function testApi() {
+  const key = document.getElementById('apiKey').value;
+  const url = document.getElementById('apiBaseUrl').value;
+  const model = document.getElementById('apiModel').value;
+  if (!key) { showToast('⚠️ 请先填写 API Key', 'warning'); return; }
+  showToast('🧪 测试连接中...', 'info');
+  try {
+    const res = await fetch(url + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: '回复"测试成功"三个字' }], max_tokens: 20 })
+    });
+    if (res.ok) showToast('✅ API 连接成功！', 'success');
+    else showToast('❌ 连接失败：' + res.status, 'error');
+  } catch(e) { showToast('❌ 连接失败：' + e.message, 'error'); }
+}
+
+function setPreset(type) {
+  const presets = {
+    openai: { url: 'https://api.openai.com/v1', model: 'gpt-4o', demo: false },
+    deepseek: { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', demo: false },
+    qwen: { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-turbo', demo: false },
+    demo: { url: 'https://demo.example.com/v1', model: 'demo', demo: true }
+  };
+  const p = presets[type];
+  document.getElementById('apiBaseUrl').value = p.url;
+  document.getElementById('apiModel').value = p.model;
+  if (type === 'demo') {
+    document.getElementById('apiKey').value = '';
+    state.settings.isDemoMode = true;
+    state.settings.apiKey = '';
+    localStorage.setItem('isDemoMode', 'true');
+    localStorage.setItem('apiKey', '');
+    document.getElementById('modelDisplay') && (document.getElementById('modelDisplay').textContent = '🎮 演示模式（无需API）');
+    showToast('🎮 已切换为演示模式，无需API Key', 'success');
+  } else {
+    document.getElementById('apiKey').value = '';
+    state.settings.isDemoMode = false;
+    localStorage.setItem('isDemoMode', 'false');
+    showToast('✅ 已设置 ' + type + ' 预设，请填写 API Key', 'success');
+  }
+}
+
+// ========================
+// Badges
+// ========================
+function updateBadges() {
+  const bankCount = state.questionBank.length;
+  const bankBadge = document.getElementById('badge-bank');
+  bankBadge.textContent = bankCount;
+  bankBadge.style.display = bankCount ? 'block' : 'none';
+
+  const composeCount = state.selectedForExam.size;
+  const composeBadge = document.getElementById('badge-compose');
+  composeBadge.textContent = composeCount;
+  composeBadge.style.display = composeCount ? 'block' : 'none';
+
+  const genCount = state.generatedQuestions.length;
+  const genBadge = document.getElementById('badge-questions');
+  genBadge.textContent = genCount;
+  genBadge.style.display = genCount ? 'block' : 'none';
+}
+
+// ========================
+// UI Helpers
+// ========================
+function showLoading(title, desc, steps) {
+  document.getElementById('loadingTitle').textContent = title;
+  document.getElementById('loadingDesc').textContent = desc;
+  const stepsEl = document.getElementById('loadingSteps');
+  stepsEl.innerHTML = steps.map((s, i) => `<div class="loading-step" id="lstep-${i}">${s}</div>`).join('');
+  document.getElementById('loadingOverlay').classList.add('show');
+  
+  // Animate steps
+  steps.forEach((_, i) => {
+    setTimeout(() => {
+      document.querySelectorAll('.loading-step').forEach((el, j) => {
+        el.className = 'loading-step' + (j < i ? ' done' : j === i ? ' active' : '');
+      });
+    }, i * 600);
+  });
+}
+
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function showToast(msg, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (type === 'error' ? ' error' : type === 'warning' ? ' warning' : '');
+  const icon = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : '✅';
+  toast.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100%)'; toast.style.transition = 'all 0.3s'; setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+function fakeDelay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ========================
+// Init
+// ========================
+// Check if demo mode is set
+if (state.settings.isDemoMode || !state.settings.apiKey) {
+  if (state.settings.isDemoMode) {
+    document.getElementById('modelDisplay') && (document.getElementById('modelDisplay').textContent = '🎮 演示模式');
+  }
+}
+
+updateBadges();
+
+// ── 自动修复：检测并清除旧代码残留的脏数据 ──
+(function autoFixStaleData() {
+  const needFix = localStorage.getItem('apiKey') === 'demo-mode'
+    || (localStorage.getItem('apiKey') && localStorage.getItem('isDemoMode') === 'false' && !localStorage.getItem('apiKey').startsWith('sk-') && !localStorage.getItem('apiKey').startsWith('dashscope-'));
+  if (!needFix) return;
+  if (sessionStorage.getItem('_cleaned')) return; // 已在本次会话中清理过，防止无限刷新
+  // 清除所有旧数据
+  localStorage.clear();
+  sessionStorage.setItem('_cleaned', '1');
+  console.log('[自动修复] 已清除旧版本残留的脏数据，即将刷新页面...');
+  setTimeout(() => location.reload(), 200);
+})();
+
+// If no settings, default to demo mode
+if (!state.settings.apiKey) {
+  state.settings.isDemoMode = true;
+  localStorage.setItem('isDemoMode', 'true');
+}
+
+// 初始化时渲染首页规范预览
+renderStandardsPreview();
+</script>
+</body>
+</html>
