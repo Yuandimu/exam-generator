@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能出题系统 · 使用说明</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #333; line-height: 1.8; }
+  .container { max-width: 860px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-size: 28px; color: #4F46E5; margin-bottom: 8px; text-align: center; }
+  .subtitle { text-align: center; color: #6b7280; margin-bottom: 32px; font-size: 15px; }
+  .section { background: #fff; border-radius: 12px; padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  .section h2 { font-size: 20px; color: #4F46E5; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .step { display: inline-block; background: #4F46E5; color: #fff; border-radius: 50%; width: 28px; height: 28px; line-height: 28px; text-align: center; font-size: 14px; font-weight: 700; margin-right: 8px; flex-shrink: 0; }
+  .screen { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px; margin: 16px 0; font-family: "Courier New", "Microsoft YaHei", monospace; }
+  .screen-title { font-size: 12px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; font-family: -apple-system, "Microsoft YaHei", sans-serif; }
+  .screen .area { background: #fff; border: 2px dashed #d1d5db; border-radius: 8px; padding: 16px; text-align: center; color: #9ca3af; margin: 8px 0; font-family: -apple-system, "Microsoft YaHei", sans-serif; }
+  .screen .area .icon { font-size: 32px; }
+  .screen .btn { display: inline-block; background: #4F46E5; color: #fff; padding: 8px 20px; border-radius: 6px; font-size: 13px; font-family: -apple-system, "Microsoft YaHei", sans-serif; }
+  .screen .btn-outline { background: #fff; color: #4F46E5; border: 1px solid #4F46E5; }
+  .screen textarea { width: 100%; min-height: 80px; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; font-size: 13px; resize: vertical; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-l1 { background: #d1fae5; color: #065f46; }
+  .badge-l2 { background: #fef3c7; color: #92400e; }
+  .badge-l3 { background: #fee2e2; color: #991b1b; }
+  .badge-single { background: #dbeafe; color: #1e40af; }
+  .badge-multi { background: #e0e7ff; color: #3730a3; }
+  .badge-judge { background: #fce7f3; color: #9d174d; }
+  .badge-scenario { background: #dbeafe; color: #1e40af; }
+  .badge-qa { background: #f3e8ff; color: #6b21a8; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+  th { background: #f9fafb; font-weight: 600; color: #6b7280; }
+  .tip { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; }
+  .tip strong { color: #2563eb; }
+  .tip-warn { background: #fffbeb; border-left-color: #f59e0b; }
+  .tip-warn strong { color: #d97706; }
+  .flow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; font-size: 14px; }
+  .flow-item { background: #f3f4f6; padding: 8px 16px; border-radius: 8px; white-space: nowrap; }
+  .flow-arrow { color: #9ca3af; font-weight: 700; }
+  .tag-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .tag { padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 600; }
+  .tag-filter { background: #f3f4f6; }
+  .tag-filter.active { background: #4F46E5; color: #fff; }
+  .footer { text-align: center; color: #9ca3af; font-size: 13px; margin-top: 32px; }
+  .highlight { background: #fef3c7; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📝 智能出题系统 · 使用说明</h1>
+<p class="subtitle">教师培训试题生成工具 &nbsp;|&nbsp; 支持五种题型 &nbsp;|&nbsp; 纯前端无后端</p>
+
+<!-- ── 工作流总览 ── -->
+<div class="section">
+  <h2>🗺️ 工作流总览</h2>
+  <div class="flow">
+    <div class="flow-item">📁 上传内容</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-item">🤖 AI出题</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-item">📚 入库筛选</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-item">📝 组卷</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-item">📤 导出Word</div>
+  </div>
+  <p style="margin-top:8px;color:#6b7280;font-size:14px">一套完整流程从上传课程内容到导出Word试卷，约需 5 分钟。</p>
+</div>
+
+<!-- ── 第一步 ── -->
+<div class="section">
+  <h2><span class="step">1</span>上传课程内容</h2>
+  <p>提供两种方式输入内容，二选一即可：</p>
+
+  <div class="screen">
+    <div class="screen-title">方式一：上传文件</div>
+    <div class="area">
+      <div class="icon">📂</div>
+      <div>点击上传或拖拽文件至此处</div>
+      <div style="margin-top:6px;font-size:12px">支持 .txt / .docx / .pdf / .pptx / .html</div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-title">方式二：直接粘贴文字</div>
+    <textarea placeholder="请在此粘贴课程讲义、教材段落、培训材料等文字内容..."></textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+      <div class="btn">继续出题 →</div>
+    </div>
+  </div>
+
+  <div class="tip">
+    <strong>💡 提示：</strong>上传文件后系统会自动提取纯文本；视频文件请先转为文字稿再上传。内容越丰富，出题质量越高。
+  </div>
+</div>
+
+<!-- ── 第二步 ── -->
+<div class="section">
+  <h2><span class="step">2</span>配置出题参数</h2>
+  <p>进入「🤖 AI智能出题」页面，设置以下参数：</p>
+
+  <table>
+    <tr><th>参数</th><th>说明</th><th>默认值</th></tr>
+    <tr><td><strong>模块名称</strong></td><td>当前课程的模块标识</td><td>第一模块</td></tr>
+    <tr><td><strong>出题数量</strong></td><td>本次生成题目总数</td><td>10 题</td></tr>
+    <tr><td><strong>出题聚焦方向</strong></td><td>题目围绕的核心主题</td><td>儿童表现特征与教学策略</td></tr>
+  </table>
+
+  <div class="tip">
+    <strong>💡 聚焦方向示例：</strong>儿童表现特征、教学策略、发展规律、常见误区、家长沟通要点、课堂观察要点
+  </div>
+</div>
+
+<!-- ── 第三步 ── -->
+<div class="section">
+  <h2><span class="step">3</span>AI 生成题目</h2>
+  <p style="margin-bottom:12px">点击「✨ 开始AI出题」按钮，系统会根据内容自动生成题目。生成结果页显示：</p>
+
+  <div class="screen">
+    <div class="screen-title">📊 生成结果统计</div>
+    <div style="display:flex;gap:12px">
+      <div class="area" style="flex:1;padding:12px"><strong style="font-size:24px;color:#4F46E5">10</strong><br>题目总数</div>
+      <div class="area" style="flex:1;padding:12px"><strong style="font-size:24px;color:#10B981">5</strong><br>题型种类</div>
+      <div class="area" style="flex:1;padding:12px"><strong style="font-size:24px;color:#F59E0B">3</strong><br>难度等级</div>
+    </div>
+  </div>
+
+  <p style="margin-top:12px">每道题卡片包含：<strong>题型标签</strong>、<strong>难度等级（L1/L2/L3）</strong>、<strong>题目内容</strong>、<strong>选项</strong>、<strong>正确答案</strong>、<strong>试题解析</strong>和<strong>考核点</strong>。</p>
+
+  <div class="tip">
+    <strong>📌 首次使用需配置 AI：</strong>点击左侧「⚙️ AI配置」，填入你的 <span class="highlight">API地址、API密钥、模型名称</span> 并保存。支持 DeepSeek、OpenAI、通义千问等兼容 OpenAI 接口的模型。
+  </div>
+</div>
+
+<!-- ── 题型说明 ── -->
+<div class="section">
+  <h2>📐 五种题型说明</h2>
+  <table>
+    <tr><th>题型</th><th>标签颜色</th><th>说明</th></tr>
+    <tr><td>单选题</td><td><span class="badge badge-single">单选</span></td><td>4选1，只有一个正确答案</td></tr>
+    <tr><td>多选题</td><td><span class="badge badge-multi">多选</span></td><td>全部选对才得分</td></tr>
+    <tr><td>判断题</td><td><span class="badge badge-judge">判断</span></td><td>正确/错误，快速筛查误区</td></tr>
+    <tr><td>情境多选题</td><td><span class="badge badge-scenario">情境</span></td><td>复杂教学情境下选择合适做法（多选）</td></tr>
+    <tr><td>问答题</td><td><span class="badge badge-qa">问答</span></td><td>开放性简答，附参考答案要点</td></tr>
+  </table>
+</div>
+
+<!-- ── 第四步 ── -->
+<div class="section">
+  <h2><span class="step">4</span>筛选题目 · 加入题库</h2>
+  <p>生成后每道题左边有 <input type="checkbox" checked> 复选框：</p>
+  <ul style="padding-left:24px;margin:8px 0">
+    <li>勾选满意的题目 → 点击「<span class="btn" style="padding:4px 12px;font-size:12px">➕ 加入题库</span>」</li>
+    <li>不满意可点「<span class="btn btn-outline" style="padding:4px 12px;font-size:12px">🔄 重新出题</span>」让AI再生成一批</li>
+    <li>点击「全选」/「取消全选」批量操作</li>
+  </ul>
+  <div class="tip tip-warn">
+    <strong>⚠️ 注意：</strong>只有加入题库的题目才能进入后续组卷和导出。生成页面关闭后未入库的题目会丢失。
+  </div>
+</div>
+
+<!-- ── 第五步 ── -->
+<div class="section">
+  <h2><span class="step">5</span>题库管理</h2>
+  <p>进入「📚 题库管理」页面，可查看所有已入库题目：</p>
+
+  <div class="screen">
+    <div class="screen-title">🔍 筛选按钮</div>
+    <div class="tag-row">
+      <div class="tag tag-filter active">全部</div>
+      <div class="tag tag-filter">单选题</div>
+      <div class="tag tag-filter">多选题</div>
+      <div class="tag tag-filter">判断题</div>
+      <div class="tag tag-filter">情境题</div>
+      <div class="tag tag-filter">问答题</div>
+      <div class="tag tag-filter">L1 基础</div>
+      <div class="tag tag-filter">L2 进阶</div>
+      <div class="tag tag-filter">L3 挑战</div>
+    </div>
+  </div>
+
+  <p style="margin-top:12px">点击题目卡右上角的 <strong>✏️</strong> 可在题库中直接编辑；点击 <strong>🗑️</strong> 删除。所有数据存储在浏览器本地，不会上传到任何服务器。</p>
+</div>
+
+<!-- ── 第六步 ── -->
+<div class="section">
+  <h2><span class="step">6</span>组卷 & 导出 Word</h2>
+  <p>进入「📝 组卷中心」页面：</p>
+
+  <ol style="padding-left:24px;margin:12px 0">
+    <li>在左侧预览区勾选要纳入试卷的题目</li>
+    <li>右侧可看到实时统计：各题型数量、难度分布</li>
+    <li>填写<strong>试卷标题</strong>和<strong>考试说明</strong></li>
+    <li>点击「<span class="btn btn-outline" style="padding:4px 12px;font-size:12px">🎲 一键智能组卷</span>」自动按规范比例选配</li>
+    <li>满意后点「<span class="btn" style="padding:4px 12px;font-size:12px">📤 确认组卷并导出 →</span>」</li>
+  </ol>
+
+  <div class="screen">
+    <div class="screen-title">导出页面</div>
+    <div style="display:flex;gap:12px">
+      <div class="btn" style="padding:12px 24px">⬇️ 导出 Word 文档（.docx）</div>
+      <div class="btn btn-outline" style="padding:12px 24px">← 返回修改组卷</div>
+    </div>
+    <div class="area" style="margin-top:12px">
+      <strong>试卷预览区</strong><br>
+      <span style="font-size:13px">含题型标签、正确答案、难易度、考核点、试题解析</span>
+    </div>
+  </div>
+
+  <div class="tip">
+    <strong>📄 导出格式：</strong>符合 Word 导入规范的完整试卷文档，包含【题型标注】【正确答案】【难易度】【考核点】【试题解析】等完整信息，可直接打印或进一步排版。
+  </div>
+</div>
+
+<!-- ── 出题规范 ── -->
+<div class="section">
+  <h2>⚙️ 自定义出题规范</h2>
+  <p>进入「⚙️ AI配置」→「📐 出题规范配置」，可自定义：</p>
+
+  <table>
+    <tr><th>配置项</th><th>说明</th><th>默认比例</th></tr>
+    <tr><td><strong>难度配比</strong></td><td>
+      <span class="badge badge-l1">L1 基础层</span> 达标刷选题（≥90%答对率）<br>
+      <span class="badge badge-l2">L2 进阶层</span> 综合辨析题（60%-80%答对率）<br>
+      <span class="badge badge-l3">L3 挑战层</span> 高区分度题（30%-50%答对率）
+    </td><td>60% / 30% / 10%</td></tr>
+    <tr><td><strong>题型配比</strong></td><td>五种题型各占百分比</td><td>40% / 20% / 20% / 10% / 10%</td></tr>
+  </table>
+
+  <p style="margin-top:8px;font-size:13px;color:#6b7280">拖动滑块自动联动，保持总和 100%。保存后即时生效。</p>
+</div>
+
+<!-- ── 快速技巧 ── -->
+<div class="section">
+  <h2>🚀 快速技巧</h2>
+  <table>
+    <tr><td>🎲</td><td><strong>Demo 模式</strong></td><td>无需 AI 配置，使用内置模板立刻体验出题流程（用于测试和演示）</td></tr>
+    <tr><td>🔄</td><td><strong>重新出题</strong></td><td>对结果不满意可直接重出，不会覆盖已入库的题目</td></tr>
+    <tr><td>📦</td><td><strong>智能分区</strong></td><td>系统自动将长内容按2000字/块切分为多个模块，确保每道题聚焦</td></tr>
+    <tr><td>💾</td><td><strong>数据持久化</strong></td><td>题库、设置、规范全部保存在浏览器本地，关闭页面不丢失</td></tr>
+    <tr><td>🔗</td><td><strong>分享链接</strong></td><td>通过 GitHub Pages 获得永久访问链接，同事无需安装任何软件</td></tr>
+  </table>
+</div>
+
+<div class="footer">
+  智能出题系统 v1.0 · 纯前端运行 · 数据不上传服务器 · 支持 DeepSeek / OpenAI / 通义千问
+</div>
+
+</div>
+</body>
+</html>
