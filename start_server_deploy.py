@@ -1,7 +1,7 @@
 """
-智能出题系统 - 服务器部署版（含文件解析API）
+智能出题系统 - 服务器部署版 v3（增强诊断）
 支持 PPTX / PDF / DOCX / TXT / MD 文件上传与内容提取
-适用于公司内部服务器部署，监听所有网络接口（0.0.0.0）
+适用于公司内部服务器部署
 """
 import http.server
 import json
@@ -9,10 +9,8 @@ import os
 import re
 import sys
 import socket
-import tempfile
 import threading
 import time
-import webbrowser
 from io import BytesIO
 
 # ── 配置 ──
@@ -21,12 +19,10 @@ HOST = '0.0.0.0'          # 监听所有网络接口（允许局域网访问）
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(DIRECTORY, "uploads")
 
-# 确保上传目录存在
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def extract_pptx(filepath):
-    """提取 PPTX 文件中所有幻灯片的文字内容"""
     from pptx import Presentation
     prs = Presentation(filepath)
     slides_text = []
@@ -38,7 +34,6 @@ def extract_pptx(filepath):
                     text = paragraph.text.strip()
                     if text:
                         slide_lines.append(text)
-            # 尝试提取表格内容
             if shape.has_table:
                 for row in shape.table.rows:
                     row_text = []
@@ -49,28 +44,25 @@ def extract_pptx(filepath):
                     if row_text:
                         slide_lines.append(" | ".join(row_text))
         if slide_lines:
-            slides_text.append(f"--- 第{idx}页 ---\n" + "\n".join(slide_lines))
+            slides_text.append(f"--- Page {idx} ---\n" + "\n".join(slide_lines))
     return "\n\n".join(slides_text)
 
 
 def extract_pdf(filepath):
-    """提取 PDF 文件文字内容"""
     from PyPDF2 import PdfReader
     reader = PdfReader(filepath)
     pages_text = []
     for idx, page in enumerate(reader.pages, 1):
         text = page.extract_text()
         if text and text.strip():
-            pages_text.append(f"--- 第{idx}页 ---\n" + text.strip())
+            pages_text.append(f"--- Page {idx} ---\n" + text.strip())
     return "\n\n".join(pages_text)
 
 
 def extract_docx(filepath):
-    """提取 DOCX 文件文字内容"""
     from docx import Document
     doc = Document(filepath)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    # 也提取表格
     for table in doc.tables:
         for row in table.rows:
             row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
@@ -80,7 +72,6 @@ def extract_docx(filepath):
 
 
 def extract_text(filepath, ext):
-    """根据扩展名提取文件内容"""
     if ext in ('.txt', '.md'):
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
             return f.read()
@@ -95,7 +86,6 @@ def extract_text(filepath, ext):
 
 
 def get_local_ip():
-    """获取本机局域网IP"""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -103,17 +93,42 @@ def get_local_ip():
         s.close()
         return ip
     except Exception:
-        return "127.0.0.1"
+        return "unknown"
+
+
+def open_firewall_windows(port):
+    """On Windows: attempt to add firewall rule for the port"""
+    if sys.platform != 'win32':
+        return False
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['netsh', 'advfirewall', 'firewall', 'add', 'rule',
+             f'name=ExamGenerator Port {port}',
+             'dir=in', 'action=allow',
+             f'tcp', f'localport={str(port)}'],
+            capture_output=True, timeout=10
+        )
+        if result.returncode == 0:
+            print(f"  [OK] Firewall rule added for port {port}")
+            return True
+        else:
+            err = result.stderr.decode('utf-8', errors='replace').strip()
+            print(f"  [WARN] Firewall rule may already exist or need admin: {err}")
+            # Rule might already exist - not a fatal error
+            return True
+    except Exception as e:
+        print(f"  [WARN] Could not configure firewall: {e}")
+        print(f"  [INFO] Please manually allow port {port} in Windows Firewall")
+        return False
 
 
 class ExamServer(http.server.SimpleHTTPRequestHandler):
-    """服务器：静态文件 + 文件上传解析 API"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
     def end_headers(self):
-        """添加响应头"""
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
@@ -123,16 +138,22 @@ class ExamServer(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, format, *args):
-        """输出关键日志"""
         if args and ('POST' in str(args) or 'error' in str(args).lower()):
             print(f"  [API] {args[0]}")
+
+    def do_GET(self):
+        # Diagnostic: log access attempts
+        client = self.client_address[0]
+        path = self.path
+        print(f"  [GET] {client} -> {path}")
+        super().do_GET()
 
     def do_POST(self):
         if self.path == '/api/upload':
             try:
                 content_type = self.headers.get('Content-Type', '')
                 if 'multipart/form-data' not in content_type:
-                    self.send_error(400, "需要 multipart/form-data")
+                    self.send_error(400, "Need multipart/form-data")
                     return
 
                 boundary = content_type.split('boundary=')[1].strip()
@@ -145,7 +166,7 @@ class ExamServer(http.server.SimpleHTTPRequestHandler):
                 filename, file_data = parse_multipart(body, boundary)
 
                 if not filename or not file_data:
-                    self.send_json(400, {"error": "未检测到上传文件"})
+                    self.send_json(400, {"error": "No file detected"})
                     return
 
                 ext = os.path.splitext(filename)[1].lower()
@@ -156,21 +177,20 @@ class ExamServer(http.server.SimpleHTTPRequestHandler):
                 try:
                     content = extract_text(tmp_path, ext)
                 except Exception as e:
-                    self.send_json(500, {"error": f"文件解析失败: {str(e)}"})
+                    self.send_json(500, {"error": f"Parse failed: {str(e)}"})
                     return
                 finally:
                     if os.path.exists(tmp_path):
                         os.remove(tmp_path)
 
                 if content is None:
-                    self.send_json(400, {"error": f"不支持的文件格式: {ext}"})
+                    self.send_json(400, {"error": f"Unsupported format: {ext}"})
                     return
 
                 if not content.strip():
-                    self.send_json(400, {"error": "文件中未检测到文字内容，可能是纯图片型文件"})
-                    return
+                    self.send_json(400, {"error": "File contains no text (image-only?)"})
 
-                print(f"  [API] 成功解析 {filename}: {len(content)} 字")
+                print(f"  [API] Parsed {filename}: {len(content)} chars")
                 self.send_json(200, {
                     "filename": filename,
                     "content": content,
@@ -179,13 +199,14 @@ class ExamServer(http.server.SimpleHTTPRequestHandler):
                 })
 
             except Exception as e:
-                print(f"  [API] 上传错误: {e}")
-                self.send_json(500, {"error": f"服务器错误: {str(e)}"})
+                print(f"  [API] Upload error: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_json(500, {"error": f"Server error: {str(e)}"})
         else:
             self.send_error(404, "Not found")
 
     def do_OPTIONS(self):
-        """CORS 预检"""
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -201,7 +222,6 @@ class ExamServer(http.server.SimpleHTTPRequestHandler):
 
 
 def parse_multipart(body, boundary):
-    """手动解析 multipart/form-data"""
     boundary_bytes = boundary.encode('utf-8')
     parts = body.split(b'--' + boundary_bytes)
 
@@ -222,44 +242,78 @@ def parse_multipart(body, boundary):
 
         filename_match = re.search(r'filename="(.+?)"', header)
         if filename_match:
-            filename = filename_match.group(1)
-            return filename, file_data
+            return filename_match.group(1), file_data
 
     return None, None
 
 
 def find_free_port(preferred_port):
-    """找可用端口"""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((HOST, preferred_port))
             return preferred_port
     except OSError:
-        print(f"  [警告] 端口 {preferred_port} 被占用，尝试自动分配...")
+        print(f"  [WARN] Port {preferred_port} occupied, finding free port...")
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((HOST, 0))
             return s.getsockname()[1]
 
 
 if __name__ == "__main__":
+    # ── Pre-flight checks ──
+    print()
+    print("========================================")
+    print("  Exam Generator Server - Starting...")
+    print("========================================")
+    print()
+
+    # Check index.html exists
+    index_path = os.path.join(DIRECTORY, 'index.html')
+    if not os.path.exists(index_path):
+        print(f"[FATAL] index.html NOT FOUND at: {index_path}")
+        print("Please ensure this script is in the same directory as index.html")
+        input("Press Enter to exit...")
+        sys.exit(1)
+    print(f"[OK] Found index.html ({os.path.getsize(index_path)} bytes)")
+    print(f"[OK] Working directory: {DIRECTORY}")
+
+    # Find available port
     port = find_free_port(PORT)
     local_ip = get_local_ip()
 
+    # Try to configure firewall on Windows
+    if sys.platform == 'win32':
+        print(f"\n[*] Attempting to configure Windows Firewall for port {port}...")
+        open_firewall_windows(port)
+
     print()
-    print("  ╔══════════════════════════════════════════════╗")
-    print("  ║        智能出题系统 - 服务器部署版           ║")
-    print("  ╠══════════════════════════════════════════════╣")
-    print(f"  ║  监听地址: {HOST}:{port}                       ║")
-    print(f"  ║  本机访问: http://localhost:{port}             ║")
-    print(f"  ║  局域网访问: http://{local_ip}:{port}          ║")
-    print("  ║  支持格式: PPTX / PDF / DOCX / TXT / MD      ║")
-    print("  ║  按 Ctrl+C 停止服务                          ║")
-    print("  ╚══════════════════════════════════════════════╝")
+    print("=" * 50)
+    print("  SERVER IS RUNNING!")
+    print("=" * 50)
+    print(f"  Local:     http://localhost:{port}")
+    print(f"  LAN:       http://{local_ip}:{port}")
+    print(f"  Host:      {HOST}:{port}")
+    print("-" * 50)
+    print("  Press Ctrl+C to stop")
+    print("=" * 50)
+    print()
+    print("[INFO] If you cannot open the page from another PC:")
+    print(f"  1. Check Windows Firewall allows port {port}")
+    print(f"  2. Temporarily disable antivirus/firewall to test")
+    print(f"  3. Ensure both PCs are on the same network")
     print()
 
     try:
-        with http.server.HTTPServer((HOST, port), ExamServer) as httpd:
-            httpd.serve_forever()
+        server = http.server.HTTPServer((HOST, port), ExamServer)
+        server.serve_forever()
     except KeyboardInterrupt:
-        print("\n服务已停止。")
+        print("\nServer stopped.")
         sys.exit(0)
+    except Exception as e:
+        print(f"\n[FATAL] Server crashed: {e}")
+        import traceback
+        traceback.print_exc()
+        input("Press Enter to exit...")
+        sys.exit(1)
