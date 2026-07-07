@@ -1122,6 +1122,7 @@ ${content}
 3. 题型分配：单选题 ${single}题, 多选题 ${multi}题, 判断题 ${judge}题, 情境多选题 ${scenario}题, 问答题 ${qa}题
 4. 情境多选题要求：基于课程内容给出一个复杂但典型的情境，要求选出所有合适的做法/策略（多选）。情境和选项应对课程内容进行合理拓展和延伸，不能只是原文摘抄。
 5. 问答题要求：围绕课程内容出开放性简答题，要求用2-4句话阐述观点或解释原理。需提供参考答案要点（2-4个关键点）。
+6. ★ 答案分布要求：单选题的正确答案必须均匀分布在A/B/C/D四个选项中，禁止多道题答案集中在同一字母。判断题的"正确"和"错误"应交替出现。
 
 请以严格的JSON格式返回，格式如下（只返回JSON，不要其他文字）：
 {
@@ -1166,7 +1167,7 @@ ${content}
   if (!jsonMatch) throw new Error('AI返回格式错误');
   
   const parsed = JSON.parse(jsonMatch[0]);
-  return parsed.questions.map((q, i) => ({
+  const result = parsed.questions.map((q, i) => ({
     ...q,
     type: normalizeQuestionType(q.type),
     difficulty: normalizeDifficulty(q.difficulty),
@@ -1176,6 +1177,7 @@ ${content}
     inBank: false,
     selected: true
   }));
+  return balanceAnswerDistribution(result);
 }
 
 // ★ 长内容分段调用AI：将内容按区切分，每段单独生成题目，确保全文覆盖
@@ -1217,6 +1219,7 @@ ${mod.content}
 3. 题型分配：单选题 ${sSingle}题, 多选题 ${sMulti}题, 判断题 ${sJudge}题, 情境多选题 ${sScenario}题, 问答题 ${sQA}题
 4. 情境多选题要求：基于课程内容给出一个复杂但典型的情境，要求选出所有合适的做法/策略（多选）。
 5. 问答题要求：围绕课程内容出开放性简答题，需提供参考答案要点。
+6. ★ 答案分布要求：单选题的正确答案必须均匀分布在A/B/C/D四个选项中，禁止多道题答案集中在同一字母。判断题的"正确"和"错误"应交替出现。
 
 请以严格的JSON格式返回：{"questions":[{"type":"...","level":"...","content":"...","options":[...],"answer":"...","keywords":"...","point":"...","analysis":"...","difficulty":"..."}]}
 
@@ -1254,7 +1257,7 @@ ${mod.content}
     }
   }
   
-  return allQuestions;
+  return balanceAnswerDistribution(allQuestions);
 }
 
 function generateDemoQuestions(content, moduleName, count, focusDirection) {
@@ -1480,7 +1483,7 @@ function buildContentBasedQuestions(knowledge, moduleName, typeCounts, levels, f
   console.log('[buildContentBasedQuestions] 共 ' + allQuestions.length + ' 题, 模块分布:', 
     allQuestions.reduce((acc, q) => { acc[q.module] = (acc[q.module] || 0) + 1; return acc; }, {}));
 
-  return allQuestions.slice(0, totalNeeded);
+  return balanceAnswerDistribution(allQuestions.slice(0, totalNeeded));
 }
 
 // ───────── 辅助函数 ─────────
@@ -1556,6 +1559,95 @@ function normalizePoint(point, type) {
     }
   }
   return p;
+}
+
+/**
+ * 均衡答案分布：将单选题/多选题/判断题的正确答案位置重新打乱，
+ * 避免出现"10道单选题答案全是B"这类问题。
+ * 策略：
+ *  - 单选题：按 A→B→C→D→A→B... 轮询分配目标位置，每题将正确选项移到目标位置
+ *  - 判断题：交替分配"正确"和"错误"
+ *  - 多选题/情境题：对选项做随机打乱，重新计算答案字母
+ *  - 问答题：跳过
+ */
+function balanceAnswerDistribution(questions) {
+  if (!questions || !questions.length) return questions;
+
+  // ── 单选题：轮询分配 A/B/C/D ──
+  const singles = questions.filter(q => q.type === 'single' && q.options && q.options.length >= 2);
+  const letters = ['A', 'B', 'C', 'D'];
+  singles.forEach((q, idx) => {
+    const targetLetter = letters[idx % 4];
+    const targetIdx = targetLetter.charCodeAt(0) - 65;
+    // 找到当前正确答案的索引
+    const correctLetter = String(q.answer || '').trim().charAt(0).toUpperCase();
+    const correctIdx = correctLetter ? correctLetter.charCodeAt(0) - 65 : 0;
+    if (correctIdx === targetIdx) return; // 已经在目标位置
+    if (targetIdx >= q.options.length) return; // 越界保护
+
+    // 交换两个选项，并更新字母前缀
+    const opts = [...q.options];
+    [opts[correctIdx], opts[targetIdx]] = [opts[targetIdx], opts[correctIdx]];
+    // 重新生成字母前缀
+    q.options = opts.map((o, i) => {
+      const dotPos = o.indexOf('. ');
+      const content = dotPos >= 0 ? o.substring(dotPos + 2) : o;
+      return String.fromCharCode(65 + i) + '. ' + content;
+    });
+    q.answer = targetLetter;
+  });
+
+  // ── 判断题：交替"正确"/"错误" ──
+  const judges = questions.filter(q => q.type === 'judge' && q.options && q.options.length === 2);
+  judges.forEach((q, idx) => {
+    const wantCorrect = idx % 2 === 0;
+    const currentAnswer = String(q.answer || '').trim();
+    const isCurrentlyCorrect = currentAnswer === '正确' || currentAnswer === 'A';
+    if (wantCorrect === isCurrentlyCorrect) return; // 已经符合
+
+    // 需要翻转：交换两个选项的位置，并更新答案
+    const opts = [...q.options];
+    [opts[0], opts[1]] = [opts[1], opts[0]];
+    // 重新生成字母前缀
+    q.options = opts.map((o, i) => {
+      const dotPos = o.indexOf('. ');
+      const content = dotPos >= 0 ? o.substring(dotPos + 2) : o;
+      return String.fromCharCode(65 + i) + '. ' + content;
+    });
+    q.answer = wantCorrect ? '正确' : '错误';
+  });
+
+  // ── 多选题/情境题：随机打乱选项，重新计算答案 ──
+  const multis = questions.filter(q => (q.type === 'multi' || q.type === 'scenario') && q.options && q.options.length >= 2);
+  multis.forEach(q => {
+    const correctLetters = String(q.answer || '').split('').filter(c => /[A-Z]/.test(c));
+    if (!correctLetters.length) return;
+
+    // 提取选项内容（去掉字母前缀）
+    const contents = q.options.map(o => {
+      const dotPos = o.indexOf('. ');
+      return dotPos >= 0 ? o.substring(dotPos + 2) : o;
+    });
+
+    // 找到正确选项的内容
+    const correctContents = correctLetters.map(l => {
+      const idx = l.charCodeAt(0) - 65;
+      return contents[idx];
+    }).filter(Boolean);
+
+    // 打乱选项
+    const shuffled = shuffleArray(contents);
+
+    // 重新生成选项和答案
+    q.options = shuffled.map((o, i) => String.fromCharCode(65 + i) + '. ' + o);
+    const newCorrectLetters = correctContents
+      .map(c => String.fromCharCode(65 + shuffled.indexOf(c)))
+      .sort()
+      .join('');
+    q.answer = newCorrectLetters;
+  });
+
+  return questions;
 }
 
 /**
